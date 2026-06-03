@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>时薪计 · 今天赚了多少</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0c1014; --panel:#141a21; --panel2:#1a212a;
+    --line:#232c37; --line2:#2e3947;
+    --text:#e7edf3; --dim:#7e8b9a; --faint:#56616f;
+    --blue:#5b8cc4; --red:#e5484d; --red-dim:#7c2f34; --green:#46b97a;
+    --amber:#d9a441;
+    --mono:'JetBrains Mono',ui-monospace,"SF Mono",Menlo,monospace;
+    --cn:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{background:var(--bg);color:var(--text);font-family:var(--cn);
+    -webkit-font-smoothing:antialiased;min-height:100%}
+  body{
+    background-image:
+      radial-gradient(900px 500px at 80% -10%, rgba(42,63,92,.35), transparent 60%),
+      radial-gradient(700px 600px at -10% 110%, rgba(124,47,52,.14), transparent 55%);
+    padding:28px 18px 60px;
+  }
+  .wrap{max-width:560px;margin:0 auto}
+  .head{display:flex;align-items:baseline;justify-content:space-between;
+    margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+  .logo{font-family:var(--mono);font-weight:800;font-size:13px;letter-spacing:.22em;
+    text-transform:uppercase}
+  .logo b{color:var(--blue)}
+  .clock{font-family:var(--mono);font-size:12px;color:var(--dim);letter-spacing:.05em}
+
+  .daytag{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .daytag .seg2{display:inline-flex;background:var(--bg);border:1px solid var(--line2);
+    border-radius:8px;padding:3px}
+  .daytag .seg2 button{background:transparent;border:0;color:var(--dim);
+    font-family:var(--cn);font-size:12px;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:500}
+  .daytag .seg2 button.on{background:var(--panel2);color:var(--text)}
+  .daytag .auto{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.03em}
+
+  .gauge{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:26px 24px 22px;position:relative;overflow:hidden}
+  .gauge::before{content:"";position:absolute;inset:0;
+    background:linear-gradient(180deg,rgba(91,140,196,.06),transparent 40%);pointer-events:none}
+  .label{font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--faint);
+    text-transform:uppercase}
+  .amount{font-family:var(--mono);font-weight:800;line-height:1;margin:14px 0 6px;
+    font-size:clamp(44px,13vw,72px);letter-spacing:-.02em;display:flex;align-items:baseline;gap:6px}
+  .amount .cur{font-size:.42em;font-weight:500;color:var(--dim);transform:translateY(-.15em)}
+  .amount .cents{color:var(--dim);font-weight:500}
+  .amount.zero{color:var(--red)}
+  .rate{font-family:var(--mono);font-size:12px;color:var(--dim);letter-spacing:.04em}
+  .rate b{font-weight:500}
+  .status{display:inline-flex;align-items:center;gap:8px;margin-top:16px;
+    font-size:12.5px;font-family:var(--mono);letter-spacing:.05em;
+    background:var(--panel2);border:1px solid var(--line2);padding:6px 12px;border-radius:999px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+  .status.work .dot{background:var(--green);animation:pulse 2.2s infinite}
+  .status.lunch .dot{background:var(--blue)}
+  .status.buffer .dot{background:var(--amber);animation:pulse 1.8s infinite}
+  .status.over .dot,.status.restUnpaid .dot{background:var(--red);animation:pulse 1.3s infinite}
+  .status.restPaid .dot{background:var(--green);animation:pulse 1.6s infinite}
+  .status.pre .dot,.status.off .dot{background:var(--faint)}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 currentColor;opacity:1}
+    70%{box-shadow:0 0 0 7px transparent;opacity:.7}100%{box-shadow:0 0 0 0 transparent;opacity:1}}
+
+  .punch{display:flex;align-items:center;gap:10px;margin-top:15px;flex-wrap:wrap}
+  .ptoggle{display:inline-flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line2);padding:7px 12px;border-radius:8px;cursor:pointer;font-size:12.5px}
+  .ptoggle input{width:15px;height:15px;accent-color:var(--red);cursor:pointer}
+  .dtin{background:var(--bg);border:1px solid var(--line2);color:var(--text);font-family:var(--mono);font-size:12.5px;padding:7px 10px;border-radius:8px;outline:none}
+  .dtin:focus{border-color:var(--blue)}
+  .punchInfo{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.03em;flex-basis:100%}
+  .metrics{display:grid;grid-template-columns:1fr 1fr;gap:1px;margin-top:14px;
+    background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .metric{background:var(--panel);padding:14px 16px}
+  .metric .k{font-size:11px;color:var(--faint);font-family:var(--mono);letter-spacing:.08em;
+    text-transform:uppercase;margin-bottom:7px}
+  .metric .v{font-family:var(--mono);font-size:21px;font-weight:700}
+  .metric .v small{font-size:12px;font-weight:400;color:var(--dim);margin-left:3px}
+  .metric .v.down{color:var(--red)} .metric .v.up{color:var(--green)}
+
+  .insight{margin-top:14px;border-radius:12px;padding:15px 17px;font-size:13.5px;
+    line-height:1.65;display:none}
+  .insight.show{display:block;animation:slide .35s ease}
+  .insight.warn{background:linear-gradient(135deg,rgba(124,47,52,.28),rgba(124,47,52,.12));border:1px solid var(--red-dim)}
+  .insight.gain{background:linear-gradient(135deg,rgba(46,87,60,.28),rgba(46,87,60,.1));border:1px solid #2f5a3f}
+  .insight.note{background:linear-gradient(135deg,rgba(120,90,30,.22),rgba(120,90,30,.08));border:1px solid #6b5320}
+  .insight .t{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px}
+  .insight.warn .t{color:var(--red)} .insight.gain .t{color:var(--green)} .insight.note .t{color:var(--amber)}
+  .insight b{font-family:var(--mono);font-weight:700}
+  .insight.warn b{color:#ff9ba0} .insight.gain b{color:#7be0a4} .insight.note b{color:#ecc173}
+  @keyframes slide{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  .settings{margin-top:22px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px 4px 10px}
+  .set-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer;user-select:none}
+  .set-head .h{font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--dim);text-transform:uppercase}
+  .chev{color:var(--faint);transition:transform .25s;font-size:13px}
+  .settings.open .chev{transform:rotate(180deg)}
+  .set-body{display:none;padding:6px 16px 8px}
+  .settings.open .set-body{display:block}
+  .seg{display:flex;background:var(--bg);border:1px solid var(--line2);border-radius:9px;padding:3px;margin-bottom:18px}
+  .seg button{flex:1;background:transparent;border:0;color:var(--dim);font-family:var(--cn);font-size:13px;padding:9px;border-radius:7px;cursor:pointer;transition:.18s;font-weight:500}
+  .seg button.on{background:var(--panel2);color:var(--text)}
+  .field{margin-bottom:15px}
+  .field label{display:block;font-size:12px;color:var(--dim);margin-bottom:7px}
+  .field input{width:100%;background:var(--bg);border:1px solid var(--line2);color:var(--text);
+    font-family:var(--mono);font-size:15px;padding:11px 13px;border-radius:9px;outline:none;transition:.15s}
+  .field input:focus{border-color:var(--blue);background:#0a0e13}
+  .row{display:flex;gap:12px}.row .field{flex:1}
+  .mini{font-family:var(--mono);font-size:10px;color:var(--blue);cursor:pointer;margin-left:8px;letter-spacing:.04em;border-bottom:1px dotted var(--blue)}
+  .hint{font-size:11px;color:var(--faint);margin:-6px 0 14px;line-height:1.55}
+  .mode-only{display:none} .mode-only.show{display:block}
+  .check{display:flex;align-items:center;gap:10px;padding:11px 13px;background:var(--bg);
+    border:1px solid var(--line2);border-radius:9px;cursor:pointer;margin-bottom:6px}
+  .check input{width:16px;height:16px;accent-color:var(--blue);cursor:pointer}
+  .check span{font-size:13px}
+  .sub{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--faint);
+    text-transform:uppercase;margin:4px 0 12px;padding-top:14px;border-top:1px solid var(--line)}
+  .logcard{margin-top:22px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .logtop{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .logtop .h{font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--dim);text-transform:uppercase}
+  #punchOutBtn{background:var(--blue);border:1px solid var(--blue);color:#06121f;font-family:var(--cn);font-weight:700;font-size:13px;padding:9px 16px;border-radius:9px;cursor:pointer;transition:.15s}
+  #punchOutBtn:hover{filter:brightness(1.1)}
+  .empty{font-size:12.5px;color:var(--faint);line-height:1.6;padding:4px 2px 12px}
+  .sumdate{font-family:var(--mono);font-size:12px;color:var(--dim);letter-spacing:.05em;margin-bottom:12px}
+  .sumgrid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:12px}
+  .sumgrid>div{background:var(--panel);padding:12px 14px}
+  .sk{font-size:10.5px;color:var(--faint);font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px}
+  .sv{font-family:var(--mono);font-size:17px;font-weight:700}
+  .sumcmp{font-family:var(--mono);font-size:13px;padding:11px 13px;border-radius:9px;background:var(--bg);border:1px solid var(--line2)}
+  .sumcmp .up{color:var(--green)} .sumcmp .down{color:var(--red)} .sumcmp .flat{color:var(--dim)}
+  .chartbox{margin:4px 0 12px} .chartbox svg{width:100%;height:auto;display:block}
+  .logfoot{display:flex;align-items:center;justify-content:space-between;gap:10px;font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+  .foot{text-align:center;margin-top:26px;font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.1em;line-height:1.8}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="head">
+    <div class="logo">时薪计 <b>/</b> WAGE·NOW</div>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+
+  <div class="daytag">
+    <div class="seg2" id="daySeg">
+      <button data-wd="1">工作日</button>
+      <button data-wd="0">休息日</button>
+    </div>
+    <span class="auto" id="dayAuto"></span>
+  </div>
+
+  <div class="gauge">
+    <div class="label" id="gLabel">今天已赚 · TODAY'S EARNINGS</div>
+    <div class="amount" id="amount"><span class="cur">¥</span><span id="intpart">0</span><span class="cents" id="centpart">.00</span></div>
+    <div class="rate" id="rate">每分钟 <b>¥0.00</b> 进账</div>
+    <div class="status pre" id="status"><span class="dot"></span><span id="statusText">尚未开始</span></div>
+    <div class="punch" id="punch">
+      <label class="ptoggle"><input type="checkbox" id="i_anchorOn"><span>通宵 / 跨日</span></label>
+      <input type="datetime-local" id="i_anchor" class="dtin" style="display:none">
+      <span class="punchInfo" id="punchInfo">干到跨日 / 通宵时勾选，并把上班时刻校准到真实开始时间</span>
+    </div>
+  </div>
+
+  <div class="metrics">
+    <div class="metric"><div class="k" id="m1k">真实时薪</div><div class="v" id="m1v">¥0.00</div></div>
+    <div class="metric"><div class="k" id="m2k">标准时薪</div><div class="v" id="m2v">¥0.00</div></div>
+    <div class="metric"><div class="k">已在岗</div><div class="v" id="m3v">0<small>分</small></div></div>
+    <div class="metric"><div class="k">加班时长</div><div class="v" id="m4v">0<small>分</small></div></div>
+  </div>
+
+  <div class="insight" id="insight">
+    <div class="t" id="insightTitle"></div>
+    <div id="insightText"></div>
+  </div>
+
+  <div class="settings open" id="settings">
+    <div class="set-head" id="setHead">
+      <div class="h">参数设置 · SETTINGS</div><div class="chev">▼</div>
+    </div>
+    <div class="set-body">
+      <div class="seg" id="modeSeg">
+        <button data-mode="monthly" class="on">固定月薪</button>
+        <button data-mode="hourly">时薪 / 计时</button>
+      </div>
+
+      <div class="mode-only show" data-for="monthly">
+        <div class="row">
+          <div class="field"><label>月薪（元）</label><input id="i_monthly" type="number" value="15000" inputmode="decimal"></div>
+          <div class="field"><label>计薪天数 <a id="daysAuto" class="mini">↻ 按本月</a></label><input id="i_days" type="number" value="21.75" inputmode="decimal"></div>
+        </div>
+        <div class="hint" id="daysHint">正在计算本月工作日…</div>
+        <label class="check"><input id="i_otpaid" type="checkbox"><span>加班 / 休息日提供加班费</span></label>
+        <div class="hint">不勾选 = 加班无报酬，工具会展示时薪被稀释/扣减的效果。</div>
+      </div>
+
+      <div class="mode-only" data-for="hourly">
+        <div class="field"><label>时薪（元/小时）</label><input id="i_hourly" type="number" value="80" inputmode="decimal"></div>
+      </div>
+
+      <div class="sub">工时 · WORK HOURS</div>
+      <div class="row">
+        <div class="field"><label>上班</label><input id="i_start" type="time" value="09:00"></div>
+        <div class="field"><label>下班</label><input id="i_end" type="time" value="18:00"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>午休开始</label><input id="i_lunchS" type="time" value="12:00"></div>
+        <div class="field"><label>午休结束</label><input id="i_lunchE" type="time" value="13:00"></div>
+      </div>
+      <div class="field"><label>加班费起算时间</label><input id="i_otStart" type="time" value="18:30"></div>
+      <div class="hint">下班到起算时间之间算「不计费缓冲」（如 18:00–18:30 不算加班费）。</div>
+
+      <div class="sub">加班倍率 · MULTIPLIER</div>
+      <div class="row">
+        <div class="field"><label>工作日加班 ×</label><input id="i_wdMult" type="number" value="1.5" step="0.1" inputmode="decimal"></div>
+        <div class="field"><label>休息日加班 ×</label><input id="i_reMult" type="number" value="2.0" step="0.1" inputmode="decimal"></div>
+      </div>
+      <div class="hint" id="stdHint">法定参考：工作日 1.5×、休息日 2×、法定节假日 3×。月薪模式需勾选「提供加班费」才生效。</div>
+    </div>
+  </div>
+
+  <div class="logcard">
+    <div class="logtop">
+      <div class="h">每日小结 · DAILY LOG</div>
+      <button id="punchOutBtn">📋 下班打卡</button>
+    </div>
+    <div id="summary"></div>
+    <div class="chartbox"><svg id="chart" viewBox="0 0 600 220" preserveAspectRatio="xMidYMid meet"></svg></div>
+    <div class="logfoot"><span id="logNote"></span><a id="clearLog" class="mini">清除历史</a></div>
+  </div>
+
+  <div class="foot">数据仅保存在你的浏览器本地 · 不上传服务器 · 换设备或清除缓存会重置<br>时薪计 · 内测体验版</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const state = { mode:'monthly', isWorkday:true, anchorStart:null };
+
+function parseTime(str){ const [h,m]=(str||'00:00').split(':').map(Number); const d=new Date(); d.setHours(h,m,0,0); return d; }
+function overlap(a0,a1,b0,b1){ return Math.max(0, Math.min(a1,b1)-Math.max(a0,b0)); }
+function fmt(n){ return n.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtDur(min){ const h=Math.floor(min/60),m=Math.floor(min%60); return h>0?`${h}<small>时</small>${m}<small>分</small>`:`${m}<small>分</small>`; }
+function fmtDurT(min){ const h=Math.floor(min/60),m=Math.floor(min%60); return h>0?`${h}时${m}分`:`${m}分`; }
+
+function read(){
+  state.mode    = document.querySelector('#modeSeg button.on').dataset.mode;
+  state.monthly = parseFloat($('i_monthly').value)||0;
+  state.days    = parseFloat($('i_days').value)||21.75;
+  state.otPaid  = $('i_otpaid').checked;
+  state.hourly  = parseFloat($('i_hourly').value)||0;
+  state.wdMult  = parseFloat($('i_wdMult').value)||1;
+  state.reMult  = parseFloat($('i_reMult').value)||1;
+  const aon=$('i_anchorOn').checked, av=$('i_anchor').value;
+  state.anchorStart = (aon&&av) ? new Date(av).getTime() : null;
+}
+
+function compute(){
+  read();
+  const now=new Date();
+  // —— 构建班次时间轴：支持打卡锚点 + 跨日 ——
+  const sStr=$('i_start').value,eStr=$('i_end').value,lsStr=$('i_lunchS').value,leStr=$('i_lunchE').value,otStr=$('i_otStart').value;
+  const startMin=(()=>{const[h,m]=sStr.split(':').map(Number);return h*60+m;})();
+  const anchor = state.anchorStart ? new Date(state.anchorStart) : null;
+  const base = anchor ? anchor : parseTime(sStr);          // 班次所属日期的基准
+  const by=base.getFullYear(),bmo=base.getMonth(),bd=base.getDate();
+  // 相对上班的时刻：数值上 <= 上班时刻者视为次日（跨日）
+  function rel(str,isStart){const[h,m]=str.split(':').map(Number);const d=new Date(by,bmo,bd,h,m,0,0);if(!isStart&&(h*60+m)<=startMin)d.setDate(d.getDate()+1);return d;}
+  const startPlan=rel(sStr,true);                          // 计划上班（定标准工时用）
+  const start = anchor ? anchor : startPlan;               // 实际上班（在岗计时用）
+  const end=rel(eStr,false);
+  let lunchS=rel(lsStr,false), lunchE=rel(leStr,false);
+  let otStart=rel(otStr,false); if(otStart<end) otStart=end; // 起算不早于下班；缓冲期=晚饭，起算后纯加班
+  const lunchMs=Math.max(0,lunchE-lunchS);
+  let stdMs=(end-startPlan)-lunchMs; if(stdMs<=0) stdMs=1;  // 标准工时按计划班次，不受打卡迟早影响
+  const stdHours=stdMs/3600000;
+  const daily=state.days>0?state.monthly/state.days:0;
+  const stdHourly=stdHours>0?daily/stdHours:0;            // 月薪单日标准时薪
+  const baseHourly=state.mode==='monthly'?stdHourly:state.hourly;
+  const isPaid=state.mode==='hourly'||state.otPaid;       // 是否给加班费
+  // 月度真实时薪基准（仅月薪有意义）
+  const R0=(state.days>0&&stdHours>0)?state.monthly/(state.days*stdHours):0;
+
+  // 从实际上班到现在的在岗时长（扣午休），可跨日累计
+  const officeMs = now>start ? (now-start)-overlap(start.getTime(),now.getTime(),lunchS.getTime(),lunchE.getTime()) : 0;
+  const officeH = Math.max(0,officeMs)/3600000;
+
+  let earned=0,perMin=0,realHourly=0,phase='pre';
+  let normalH=0,overH=0,bufferH=0,R1=R0;
+
+  if(!state.isWorkday){
+    // 休息日：全程算加班
+    overH=officeH;
+    if(now<start){ phase='pre'; }
+    else if(now>=lunchS&&now<lunchE){ phase='lunch'; }
+    else if(officeH>0){
+      if(isPaid){
+        phase='restPaid';
+        earned=baseHourly*state.reMult*officeH;
+        perMin=baseHourly*state.reMult/60;
+        realHourly=baseHourly*state.reMult;
+      }else{
+        phase='restUnpaid';
+        earned=0; perMin=0; realHourly=0;
+        R1=(state.days>0&&stdHours>0)?state.monthly/(state.days*stdHours+officeH):R0;
+      }
+    } else { phase='pre'; }
+  } else {
+    // 工作日：用「实际在岗区间」与「计划时段」求交集，兼容打卡早晚与跨日
+    const nowT=now.getTime(), sT=start.getTime(), spT=startPlan.getTime(),
+          eT=end.getTime(), otT=otStart.getTime(), lsT=lunchS.getTime(), leT=lunchE.getTime();
+    const nStart=Math.max(sT,spT), nEnd=Math.min(nowT,eT);          // 正常时段交集
+    const normMs = nEnd>nStart ? (nEnd-nStart)-overlap(nStart,nEnd,lsT,leT) : 0;
+    normalH=Math.max(0,normMs)/3600000;
+    const ovFrom=Math.max(otT,sT);                                   // 加班从「起算」与「实际上班」较晚者
+    const ovMs = nowT>ovFrom ? (nowT-ovFrom)-overlap(ovFrom,nowT,lsT,leT) : 0;
+    overH=Math.max(0,ovMs)/3600000;
+    const bufFrom=Math.max(eT,sT), bufTo=Math.min(nowT,otT);
+    bufferH = bufTo>bufFrom ? (bufTo-bufFrom)/3600000 : 0;
+
+    if(nowT<sT) phase='pre';
+    else if(nowT>=lsT&&nowT<leT) phase='lunch';
+    else if(nowT<eT) phase='work';
+    else if(nowT<otT) phase='buffer';
+    else phase='over';
+
+    const normalEarn=baseHourly*normalH;
+    if(phase==='over'&&isPaid){ earned=normalEarn+baseHourly*state.wdMult*overH; perMin=baseHourly*state.wdMult/60; }
+    else if(phase==='work'){ earned=normalEarn; perMin=baseHourly/60; }
+    else { earned=normalEarn; perMin=0; }            // lunch / buffer / 加班不计薪
+    realHourly = officeH>0 ? earned/officeH : baseHourly;
+  }
+
+  return {now,phase,earned,perMin,realHourly,stdHourly,baseHourly,officeH,overH,bufferH,normalH,
+          stdHours,daily,R0,R1,otValuePaid:baseHourly*state.wdMult*overH,
+          otStdValue:stdHourly*overH, otStart, anchored:!!anchor};
+}
+
+const STATUS={
+  pre:['pre','尚未开始'], work:['work','上班中 · 进账中'], lunch:['lunch','午休中 · 暂停'],
+  buffer:['buffer','已下班 · 缓冲期'], over:['over','加班中'],
+  restPaid:['restPaid','休息日加班中'], restUnpaid:['restUnpaid','休息日加班中 · 无报酬'], off:['off','收工']
+};
+
+function render(){
+  const r=compute();
+  $('clock').textContent=r.now.toLocaleTimeString('zh-CN',{hour12:false});
+
+  // 跨日 / 通宵：标题与累计提示
+  if(state.anchorStart){
+    $('gLabel').textContent='本班次已赚 · THIS SHIFT';
+    const t=new Date(state.anchorStart);
+    const ts=t.toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
+    $('punchInfo').textContent=`上班时刻 ${ts} · 已累计 ${fmtDurT(r.officeH*60)}（可随时校准上方时刻）`;
+  }else{
+    $('gLabel').textContent="今天已赚 · TODAY'S EARNINGS";
+    $('punchInfo').textContent='干到跨日 / 通宵时勾选，并把上班时刻校准到真实开始时间';
+  }
+
+  const intp=Math.floor(r.earned), cents=(r.earned-intp).toFixed(2).slice(1);
+  $('intpart').textContent=intp.toLocaleString('zh-CN');
+  $('centpart').textContent=cents;
+  $('amount').className='amount'+(r.phase==='restUnpaid'?' zero':'');
+
+  // 速率
+  if(r.perMin>0){
+    const col=(r.phase==='over'||r.phase==='restPaid')?'var(--green)':'var(--green)';
+    $('rate').innerHTML=`每分钟 <b style="color:${col}">¥${fmt(r.perMin)}</b> 进账`;
+  }else if(r.phase==='over'){ $('rate').innerHTML=`<b style="color:var(--red)">¥0.00</b> · 加班不计薪`; }
+  else if(r.phase==='restUnpaid'){ $('rate').innerHTML=`<b style="color:var(--red)">¥0.00</b> · 休息日白干`; }
+  else if(r.phase==='buffer'){ $('rate').innerHTML=`<b style="color:var(--amber)">¥0.00</b> · 缓冲期不计费`; }
+  else if(r.phase==='lunch'){ $('rate').innerHTML=`午休中 · 暂停计薪`; }
+  else { $('rate').innerHTML=`等待开工`; }
+
+  const [cls,txt]=STATUS[r.phase];
+  $('status').className='status '+cls;
+  let stxt=txt;
+  if(r.phase==='over') stxt=`加班中 · ${fmtDurT(r.overH*60)}`;
+  if(r.phase==='restPaid'||r.phase==='restUnpaid') stxt=`${txt.split(' · ')[0]} · ${fmtDurT(r.officeH*60)}`;
+  $('statusText').textContent=stxt;
+
+  // 指标
+  $('m2v').textContent='¥'+fmt(r.stdHourly);
+  $('m2k').textContent= state.mode==='monthly'?'标准时薪':'基础时薪';
+  $('m3v').innerHTML=fmtDur(r.officeH*60);
+  const otMin = state.isWorkday ? (r.overH+r.bufferH)*60 : r.officeH*60;
+  $('m4v').innerHTML= otMin>0.5 ? fmtDur(otMin) : '0<small>分</small>';
+
+  const m1=$('m1v');
+  if(r.phase==='restUnpaid'){
+    $('m1k').textContent='本月真实时薪';
+    m1.textContent='¥'+fmt(r.R1); m1.className='v down';
+  }else{
+    $('m1k').textContent= state.mode==='monthly'?'真实时薪':'实际均时薪';
+    m1.textContent='¥'+fmt(r.realHourly);
+    const down=state.mode==='monthly'&&r.realHourly<r.stdHourly-0.005;
+    const up=state.mode==='hourly'&&r.realHourly>r.stdHourly+0.005;
+    m1.className='v'+(down?' down':(up?' up':''));
+  }
+
+  // 洞察
+  const ins=$('insight'),it=$('insightTitle'),ix=$('insightText');
+  const M=state.mode, otStr2=fmtDurT(r.overH*60), offStr=fmtDurT(r.officeH*60);
+  if(r.phase==='buffer'){
+    ins.className='insight note show'; it.innerHTML='● 不计费缓冲期（晚饭时间）';
+    const left=Math.ceil((r.otStart-r.now)/60000);
+    ix.innerHTML=`已下班，还需 <b>${left} 分钟</b> 才到加班费起算时间，这段算晚饭/休息。${M==='monthly'&&!state.otPaid?'不产生任何报酬。':'暂不计加班费。'}`;
+  }else if(r.phase==='over'){
+    if(state.otPaid||M==='hourly'){
+      ins.className='insight gain show'; it.innerHTML='▲ 加班计费中';
+      ix.innerHTML=`计费加班 <b>${otStr2}</b>（${state.wdMult}×），这段加班费 <b>¥${fmt(r.otValuePaid)}</b>。`;
+    }else{
+      ins.className='insight warn show';
+      const pct=r.stdHourly>0?(1-r.realHourly/r.stdHourly)*100:0;
+      it.innerHTML='⚠ 时薪正在被稀释';
+      ix.innerHTML=`加班 <b>${otStr2}</b>，今日真实时薪从 ¥${fmt(r.stdHourly)} 缩到 <b>¥${fmt(r.realHourly)}</b>（<b>-${pct.toFixed(1)}%</b>）。这段按标准价值 <b>¥${fmt(r.otStdValue)}</b>，你一分没多拿。`;
+    }
+  }else if(r.phase==='restUnpaid'){
+    ins.className='insight warn show'; it.innerHTML='⚠ 休息日白干 · 时薪扣减';
+    const pct=r.R0>0?(1-r.R1/r.R0)*100:0;
+    ix.innerHTML=`今天本是休息日，已工作 <b>${offStr}</b>、报酬 <b>¥0</b>。本月真实时薪从 ¥${fmt(r.R0)} 拉低到 <b>¥${fmt(r.R1)}</b>（<b>-${pct.toFixed(2)}%</b>）。<br>少加点班。`;
+  }else if(r.phase==='restPaid'){
+    ins.className='insight gain show'; it.innerHTML='▲ 休息日加班费';
+    ix.innerHTML=`休息日加班 <b>${offStr}</b>（${state.reMult}×），已赚 <b>¥${fmt(r.earned)}</b>，全是额外收入。`;
+  }else{ ins.className='insight'; }
+
+  $('stdHint').innerHTML=`标准工时 ${r.stdHours.toFixed(2)} 小时/天 · 法定参考：工作日 1.5×、休息日 2×、节假日 3×`;
+}
+
+// 交互
+document.querySelectorAll('#modeSeg button').forEach(b=>{ b.onclick=()=>{
+  document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+  document.querySelectorAll('.mode-only').forEach(el=>el.classList.toggle('show',el.dataset.for===b.dataset.mode));
+  render();
+};});
+document.querySelectorAll('#daySeg button').forEach(b=>{ b.onclick=()=>{
+  document.querySelectorAll('#daySeg button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+  state.isWorkday=b.dataset.wd==='1'; render();
+};});
+document.querySelectorAll('input').forEach(i=>i.addEventListener('input',render));
+$('setHead').onclick=()=>$('settings').classList.toggle('open');
+$('i_anchorOn').onchange=()=>{
+  const on=$('i_anchorOn').checked;
+  $('i_anchor').style.display=on?'inline-block':'none';
+  if(on&&!$('i_anchor').value){
+    const n=new Date(),p=x=>String(x).padStart(2,'0'),hm=($('i_start').value||'09:00');
+    $('i_anchor').value=`${n.getFullYear()}-${p(n.getMonth()+1)}-${p(n.getDate())}T${hm}`;
+  }
+  render();
+};
+
+// —— 中国法定节假日（2026年，国办发明电〔2025〕7号）——
+const HOLIDAYS_2026=new Set(['1-1','1-2','1-3','2-15','2-16','2-17','2-18','2-19','2-20','2-21','2-22','2-23','4-4','4-5','4-6','5-1','5-2','5-3','5-4','5-5','6-19','6-20','6-21','9-25','9-26','9-27','10-1','10-2','10-3','10-4','10-5','10-6','10-7']);
+const MAKEUPS_2026=new Set(['1-4','2-14','2-28','5-9','9-20','10-10']);
+function workdaysInMonth(y,m){               // m: 1-12，返回当月实际工作日，无数据返回 null
+  if(y!==2026) return null;
+  const n=new Date(y,m,0).getDate(); let c=0;
+  for(let d=1;d<=n;d++){
+    const key=m+'-'+d, dow=new Date(y,m-1,d).getDay(), weekend=(dow===0||dow===6);
+    if(MAKEUPS_2026.has(key)){c++;continue;}  // 调休补班：算工作日
+    if(HOLIDAYS_2026.has(key)) continue;      // 法定假：不算
+    if(!weekend) c++;
+  }
+  return c;
+}
+function fillDays(){
+  const now=new Date(), y=now.getFullYear(), m=now.getMonth()+1, wd=workdaysInMonth(y,m);
+  if(wd!==null){ $('i_days').value=wd;
+    $('daysHint').textContent=`${y}年${m}月实际工作日 ${wd} 天（已扣法定节假日、含调休补班；可手动改）`;
+  }else{
+    $('daysHint').textContent=`${y}年暂无内置节假日数据，请手动填写（法定固定基数为 21.75）`;
+  }
+  render();
+}
+$('daysAuto').onclick=fillDays;
+fillDays();
+
+// 按周几自动初始化今天类型
+(function(){
+  const d=new Date().getDay(); const names=['周日','周一','周二','周三','周四','周五','周六'];
+  const wd=(d>=1&&d<=5); state.isWorkday=wd;
+  document.querySelector(`#daySeg button[data-wd="${wd?1:0}"]`).classList.add('on');
+  $('dayAuto').textContent=`检测：${names[d]}（默认按${wd?'工作日':'休息日'}，可手动切换）`;
+})();
+
+// —— 每日小结与趋势（本机存储，沙箱不可用时降级到内存）——
+const CH={green:'#46b97a',red:'#e5484d',steel:'#8a929e',text:'#e7edf3',faint:'#56616f',line:'#2a3340'};
+const LKEY='wage_daily_log_v1'; let memLog={}, logNoStore=false;
+function loadLog(){ if(logNoStore) return memLog; try{const s=localStorage.getItem(LKEY);return s?JSON.parse(s):{};}catch(e){logNoStore=true;return memLog;} }
+function saveLog(o){ if(logNoStore){memLog=o;return;} try{localStorage.setItem(LKEY,JSON.stringify(o));}catch(e){logNoStore=true;memLog=o;} }
+function todayKey(){ const b=state.anchorStart?new Date(state.anchorStart):new Date(); const p=x=>String(x).padStart(2,'0'); return `${b.getFullYear()}-${p(b.getMonth()+1)}-${p(b.getDate())}`; }
+
+function renderChart(entries){
+  const svg=$('chart'),W=600,H=220,pL=44,pR=16,pT=24,pB=34;
+  if(!entries.length){ svg.innerHTML=`<text x="${W/2}" y="${H/2}" fill="${CH.faint}" font-size="13" text-anchor="middle" font-family="monospace">下班打卡后，这里显示每日时薪趋势</text>`; return; }
+  const data=entries.slice(-14), n=data.length, vals=data.map(d=>d.effHourly), max=Math.max(...vals,1)*1.15, bw=(W-pL-pR)/n;
+  let s='';
+  for(let g=0;g<=2;g++){ const v=max*g/2, y=pT+(H-pT-pB)*(1-g/2);
+    s+=`<line x1="${pL}" y1="${y.toFixed(1)}" x2="${W-pR}" y2="${y.toFixed(1)}" stroke="${CH.line}" stroke-width="1"/>`;
+    s+=`<text x="${pL-6}" y="${(y+4).toFixed(1)}" fill="${CH.faint}" font-size="9" text-anchor="end" font-family="monospace">${Math.round(v)}</text>`;
+  }
+  data.forEach((d,i)=>{
+    const h=(H-pT-pB)*(d.effHourly/max), x=pL+i*bw+bw*0.18, w=bw*0.64, y=H-pB-h;
+    const prev=i>0?data[i-1].effHourly:d.effHourly;
+    const col=d.effHourly>prev+0.01?CH.green:(d.effHourly<prev-0.01?CH.red:CH.steel), last=i===n-1;
+    s+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(0,h).toFixed(1)}" rx="3" fill="${col}" opacity="${last?1:0.5}"${last?` stroke="${CH.text}" stroke-width="1"`:''}/>`;
+    if(last||n<=10) s+=`<text x="${(x+w/2).toFixed(1)}" y="${(y-5).toFixed(1)}" fill="${CH.text}" font-size="9.5" text-anchor="middle" font-family="monospace">${Math.round(d.effHourly)}</text>`;
+    s+=`<text x="${(x+w/2).toFixed(1)}" y="${H-pB+14}" fill="${CH.faint}" font-size="9" text-anchor="middle" font-family="monospace">${d.date.slice(5).replace('-','/')}</text>`;
+  });
+  svg.innerHTML=s;
+}
+
+function renderLog(){
+  const entries=Object.values(loadLog()).sort((a,b)=>a.date<b.date?-1:1);
+  renderChart(entries);
+  const sum=$('summary');
+  if(!entries.length){ sum.innerHTML=`<div class="empty">还没有记录。完成一天后点「下班打卡」，这里会显示当日小结，并与前一天对比时薪涨跌。</div>`; }
+  else{
+    const cur=entries[entries.length-1], prev=entries.length>1?entries[entries.length-2]:null;
+    let cmp;
+    if(!prev) cmp=`<span class="flat">首日记录，暂无对比</span>`;
+    else{ const d=cur.effHourly-prev.effHourly, pct=prev.effHourly>0?d/prev.effHourly*100:0;
+      if(Math.abs(d)<0.01) cmp=`<span class="flat">与 ${prev.date.slice(5)} 持平（¥${fmt(cur.effHourly)}/时）</span>`;
+      else{ const up=d>0; cmp=`<span class="${up?'up':'down'}">${up?'↑ 时薪提高':'↓ 时薪降低'} ¥${fmt(Math.abs(d))}/时（${up?'+':'-'}${Math.abs(pct).toFixed(1)}% vs ${prev.date.slice(5)}）</span>`; }
+    }
+    sum.innerHTML=`<div class="sumdate">${cur.date} · ${cur.isWorkday?'工作日':'休息日'} · ${cur.mode==='monthly'?'月薪':'时薪'}</div>
+      <div class="sumgrid">
+        <div><div class="sk">在岗时长</div><div class="sv">${fmtDurT(cur.officeH*60)}</div></div>
+        <div><div class="sk">正常 / 加班</div><div class="sv">${fmtDurT(cur.normalH*60)} / ${fmtDurT(cur.overH*60)}</div></div>
+        <div><div class="sk">今日收入</div><div class="sv">¥${fmt(cur.earned)}</div></div>
+        <div><div class="sk">当日实得时薪</div><div class="sv">¥${fmt(cur.effHourly)}</div></div>
+      </div>
+      <div class="sumcmp">${cmp}</div>`;
+  }
+  $('logNote').textContent = logNoStore?'⚠ 此环境无法保存历史；下载到本地浏览器打开可长期记录':'历史记录保存在本机浏览器';
+}
+
+$('punchOutBtn').onclick=()=>{
+  const r=compute();
+  if(r.officeH<=0){ $('logNote').textContent='当前没有在岗时长，暂无法记录'; return; }
+  const key=todayKey(), log=loadLog();
+  log[key]={date:key,officeH:r.officeH,normalH:r.normalH,overH:r.overH,earned:r.earned,effHourly:r.earned/r.officeH,stdHourly:r.stdHourly,mode:state.mode,isWorkday:state.isWorkday};
+  saveLog(log); renderLog();
+};
+$('clearLog').onclick=()=>{ try{if(window.confirm&&!window.confirm('清除全部每日记录？'))return;}catch(e){} saveLog({}); memLog={}; renderLog(); };
+renderLog();
+
+render();
+setInterval(render,200);
+</script>
+</body>
+</html>
