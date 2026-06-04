@@ -46,6 +46,17 @@
     padding:26px 24px 22px;position:relative;overflow:hidden}
   .gauge::before{content:"";position:absolute;inset:0;
     background:linear-gradient(180deg,rgba(91,140,196,.06),transparent 40%);pointer-events:none}
+  .fx{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1}
+  .gauge>.label,.gauge>.amount,.gauge>.rate,.gauge>.drainMeter,.gauge>.status,.gauge>.punch{position:relative;z-index:2}
+  .coin{position:absolute;bottom:6px;opacity:0;user-select:none;will-change:transform,opacity}
+  .coin.up{animation:floatUp linear forwards}
+  @keyframes floatUp{0%{opacity:0;transform:translateY(0) scale(.5)}20%{opacity:.95}100%{opacity:0;transform:translateY(-96px) scale(1.05)}}
+  .drainMeter{display:none;margin-top:10px;font-family:var(--mono);font-size:14px;color:var(--red);letter-spacing:.03em}
+  .drainMeter.show{display:block}
+  .drainMeter b{font-size:21px;font-weight:800;margin-left:5px;text-shadow:0 0 12px rgba(229,72,77,.4)}
+  .amount.drain{color:var(--red);animation:sink 1.6s ease-in-out infinite}
+  .amount.drain .cur,.amount.drain .cents{color:#e0707a}
+  @keyframes sink{0%,100%{transform:translateY(0)}50%{transform:translateY(3px)}}
   .label{font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--faint);
     text-transform:uppercase}
   .amount{font-family:var(--mono);font-weight:800;line-height:1;margin:14px 0 6px;
@@ -114,6 +125,7 @@
   .mini{font-family:var(--mono);font-size:10px;color:var(--blue);cursor:pointer;margin-left:8px;letter-spacing:.04em;border-bottom:1px dotted var(--blue)}
   .hint{font-size:11px;color:var(--faint);margin:-6px 0 14px;line-height:1.55}
   .mode-only{display:none} .mode-only.show{display:block}
+  .otonly{display:none}
   .check{display:flex;align-items:center;gap:10px;padding:11px 13px;background:var(--bg);
     border:1px solid var(--line2);border-radius:9px;cursor:pointer;margin-bottom:6px}
   .check input{width:16px;height:16px;accent-color:var(--blue);cursor:pointer}
@@ -158,12 +170,14 @@
     <div class="label" id="gLabel">今天已赚 · TODAY'S EARNINGS</div>
     <div class="amount" id="amount"><span class="cur">¥</span><span id="intpart">0</span><span class="cents" id="centpart">.00</span></div>
     <div class="rate" id="rate">每分钟 <b>¥0.00</b> 进账</div>
+    <div class="drainMeter" id="drainMeter">正在白干流失 <b id="lostAmt">¥0.00</b></div>
     <div class="status pre" id="status"><span class="dot"></span><span id="statusText">尚未开始</span></div>
     <div class="punch" id="punch">
       <label class="ptoggle"><input type="checkbox" id="i_anchorOn"><span>通宵 / 跨日</span></label>
       <input type="datetime-local" id="i_anchor" class="dtin" style="display:none">
       <span class="punchInfo" id="punchInfo">干到跨日 / 通宵时勾选，并把上班时刻校准到真实开始时间</span>
     </div>
+    <div class="fx" id="fx"></div>
   </div>
 
   <div class="metrics">
@@ -204,22 +218,28 @@
 
       <div class="sub">工时 · WORK HOURS</div>
       <div class="row">
-        <div class="field"><label>上班</label><input id="i_start" type="time" value="09:00"></div>
-        <div class="field"><label>下班</label><input id="i_end" type="time" value="18:00"></div>
+        <div class="field"><label>上班</label><input id="i_start" type="time" value="08:30"></div>
+        <div class="field"><label>下班</label><input id="i_end" type="time" value="17:30"></div>
       </div>
       <div class="row">
         <div class="field"><label>午休开始</label><input id="i_lunchS" type="time" value="12:00"></div>
         <div class="field"><label>午休结束</label><input id="i_lunchE" type="time" value="13:00"></div>
       </div>
-      <div class="field"><label>加班费起算时间</label><input id="i_otStart" type="time" value="18:30"></div>
-      <div class="hint">下班到起算时间之间算「不计费缓冲」（如 18:00–18:30 不算加班费）。</div>
+      <div class="hint" id="stdHint">标准工时计算中…</div>
 
-      <div class="sub">加班倍率 · MULTIPLIER</div>
-      <div class="row">
-        <div class="field"><label>工作日加班 ×</label><input id="i_wdMult" type="number" value="1.5" step="0.1" inputmode="decimal"></div>
-        <div class="field"><label>休息日加班 ×</label><input id="i_reMult" type="number" value="2.0" step="0.1" inputmode="decimal"></div>
+      <div class="otonly">
+        <div class="field"><label>加班费起算时间</label><input id="i_otStart" type="time" value="18:00"></div>
+        <div class="hint">下班到起算时间之间算「不计费缓冲」（如 17:30–18:00 不算加班费）。</div>
       </div>
-      <div class="hint" id="stdHint">法定参考：工作日 1.5×、休息日 2×、法定节假日 3×。月薪模式需勾选「提供加班费」才生效。</div>
+
+      <div class="otonly">
+        <div class="sub">加班倍率 · MULTIPLIER</div>
+        <div class="row">
+          <div class="field"><label>工作日加班 ×</label><input id="i_wdMult" type="number" value="1.5" step="0.1" inputmode="decimal"></div>
+          <div class="field"><label>休息日加班 ×</label><input id="i_reMult" type="number" value="2.0" step="0.1" inputmode="decimal"></div>
+        </div>
+        <div class="hint">法定参考：工作日 1.5×、休息日 2×、法定节假日 3×。</div>
+      </div>
     </div>
   </div>
 
@@ -239,6 +259,7 @@
 <script>
 const $ = id => document.getElementById(id);
 const state = { mode:'monthly', isWorkday:true, anchorStart:null };
+let fxMode=null;
 
 function parseTime(str){ const [h,m]=(str||'00:00').split(':').map(Number); const d=new Date(); d.setHours(h,m,0,0); return d; }
 function overlap(a0,a1,b0,b1){ return Math.max(0, Math.min(a1,b1)-Math.max(a0,b0)); }
@@ -315,16 +336,18 @@ function compute(){
     const nStart=Math.max(sT,spT), nEnd=Math.min(nowT,eT);          // 正常时段交集
     const normMs = nEnd>nStart ? (nEnd-nStart)-overlap(nStart,nEnd,lsT,leT) : 0;
     normalH=Math.max(0,normMs)/3600000;
-    const ovFrom=Math.max(otT,sT);                                   // 加班从「起算」与「实际上班」较晚者
+    // 不提供加班费时，加班费起算时间不生效：下班(end)后即开始稀释，无缓冲期
+    const otRef = isPaid ? otT : eT;
+    const ovFrom=Math.max(otRef,sT);
     const ovMs = nowT>ovFrom ? (nowT-ovFrom)-overlap(ovFrom,nowT,lsT,leT) : 0;
     overH=Math.max(0,ovMs)/3600000;
     const bufFrom=Math.max(eT,sT), bufTo=Math.min(nowT,otT);
-    bufferH = bufTo>bufFrom ? (bufTo-bufFrom)/3600000 : 0;
+    bufferH = (isPaid && bufTo>bufFrom) ? (bufTo-bufFrom)/3600000 : 0;
 
     if(nowT<sT) phase='pre';
     else if(nowT>=lsT&&nowT<leT) phase='lunch';
     else if(nowT<eT) phase='work';
-    else if(nowT<otT) phase='buffer';
+    else if(isPaid && nowT<otT) phase='buffer';      // 缓冲期仅在提供加班费时存在
     else phase='over';
 
     const normalEarn=baseHourly*normalH;
@@ -349,31 +372,43 @@ function render(){
   const r=compute();
   $('clock').textContent=r.now.toLocaleTimeString('zh-CN',{hour12:false});
 
-  // 跨日 / 通宵：标题与累计提示
+  // 打卡提示（始终更新）
   if(state.anchorStart){
-    $('gLabel').textContent='本班次已赚 · THIS SHIFT';
     const t=new Date(state.anchorStart);
     const ts=t.toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
     $('punchInfo').textContent=`上班时刻 ${ts} · 已累计 ${fmtDurT(r.officeH*60)}（可随时校准上方时刻）`;
   }else{
-    $('gLabel').textContent="今天已赚 · TODAY'S EARNINGS";
     $('punchInfo').textContent='干到跨日 / 通宵时勾选，并把上班时刻校准到真实开始时间';
   }
 
-  const intp=Math.floor(r.earned), cents=(r.earned-intp).toFixed(2).slice(1);
-  $('intpart').textContent=intp.toLocaleString('zh-CN');
-  $('centpart').textContent=cents;
-  $('amount').className='amount'+(r.phase==='restUnpaid'?' zero':'');
+  // 主数字重心：月薪无加班费且在稀释 → 聚焦「当日真实时薪」下降；否则显示累计已赚
+  const isPaid = state.mode==='hourly' || state.otPaid;
+  const drain = state.mode==='monthly' && !isPaid && (r.phase==='over' || r.phase==='restUnpaid');
+  const gain = r.perMin>0;
+  fxMode = gain ? 'gain' : null;
 
-  // 速率
-  if(r.perMin>0){
-    const col=(r.phase==='over'||r.phase==='restPaid')?'var(--green)':'var(--green)';
-    $('rate').innerHTML=`每分钟 <b style="color:${col}">¥${fmt(r.perMin)}</b> 进账`;
-  }else if(r.phase==='over'){ $('rate').innerHTML=`<b style="color:var(--red)">¥0.00</b> · 加班不计薪`; }
-  else if(r.phase==='restUnpaid'){ $('rate').innerHTML=`<b style="color:var(--red)">¥0.00</b> · 休息日白干`; }
-  else if(r.phase==='buffer'){ $('rate').innerHTML=`<b style="color:var(--amber)">¥0.00</b> · 缓冲期不计费`; }
-  else if(r.phase==='lunch'){ $('rate').innerHTML=`午休中 · 暂停计薪`; }
-  else { $('rate').innerHTML=`等待开工`; }
+  if(drain){
+    $('gLabel').textContent='当日真实时薪 · REAL HOURLY ↓';
+    const v=r.realHourly, ip=Math.floor(v), ct=(v-ip).toFixed(2).slice(1);
+    $('intpart').textContent=ip.toLocaleString('zh-CN');
+    $('centpart').textContent=ct;
+    $('amount').className='amount drain';
+    const pct=r.stdHourly>0?(1-r.realHourly/r.stdHourly)*100:0;
+    $('rate').innerHTML=`较标准时薪 ¥${fmt(r.stdHourly)}　<b style="color:var(--red)">↓ -${pct.toFixed(1)}%</b>`;
+    $('drainMeter').className='drainMeter show';
+    $('lostAmt').textContent='¥'+fmt(r.otStdValue);
+  }else{
+    $('drainMeter').className='drainMeter';
+    $('gLabel').textContent = state.anchorStart ? '本班次已赚 · THIS SHIFT' : "今天已赚 · TODAY'S EARNINGS";
+    const intp=Math.floor(r.earned), cents=(r.earned-intp).toFixed(2).slice(1);
+    $('intpart').textContent=intp.toLocaleString('zh-CN');
+    $('centpart').textContent=cents;
+    $('amount').className='amount';
+    if(r.perMin>0){ $('rate').innerHTML=`每分钟 <b style="color:var(--green)">¥${fmt(r.perMin)}</b> 进账`; }
+    else if(r.phase==='buffer'){ $('rate').innerHTML=`<b style="color:var(--amber)">¥0.00</b> · 缓冲期不计费`; }
+    else if(r.phase==='lunch'){ $('rate').innerHTML=`午休中 · 暂停计薪`; }
+    else { $('rate').innerHTML=`等待开工`; }
+  }
 
   const [cls,txt]=STATUS[r.phase];
   $('status').className='status '+cls;
@@ -427,7 +462,9 @@ function render(){
     ix.innerHTML=`休息日加班 <b>${offStr}</b>（${state.reMult}×），已赚 <b>¥${fmt(r.earned)}</b>，全是额外收入。`;
   }else{ ins.className='insight'; }
 
-  $('stdHint').innerHTML=`标准工时 ${r.stdHours.toFixed(2)} 小时/天 · 法定参考：工作日 1.5×、休息日 2×、节假日 3×`;
+  $('stdHint').textContent=`标准工时 ${r.stdHours.toFixed(2)} 小时/天（已扣午休）`;
+  const showOt = state.mode==='hourly' || state.otPaid;
+  document.querySelectorAll('.otonly').forEach(el=>el.style.display = showOt?'block':'none');
 }
 
 // 交互
@@ -550,6 +587,20 @@ renderLog();
 
 render();
 setInterval(render,200);
+
+// 金币动效：进账时 🪙 上浮积累
+function spawnCoin(){
+  const fx=$('fx'); if(!fx) return;
+  const el=document.createElement('span');
+  el.className='coin up'; el.textContent='🪙';
+  el.style.left=(8+Math.random()*84)+'%';
+  const dur=1200+Math.random()*700;
+  el.style.animationDuration=dur+'ms';
+  el.style.fontSize=(15+Math.random()*13)+'px';
+  fx.appendChild(el);
+  setTimeout(()=>el.remove(),dur+60);
+}
+setInterval(()=>{ if(fxMode==='gain') spawnCoin(); },520);
 </script>
 </body>
 </html>
