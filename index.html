@@ -627,7 +627,7 @@ $('punchOutBtn').onclick=()=>{
   log[key]={date:key,officeH:r.officeH,normalH:r.normalH,overH:r.overH,earned:r.earned,effHourly:r.earned/r.officeH,stdHourly:r.stdHourly,mode:state.mode,isWorkday:state.isWorkday};
   saveLog(log); renderLog();
 };
-$('clearLog').onclick=()=>{ try{if(window.confirm&&!window.confirm('清除全部每日记录？'))return;}catch(e){} saveLog({}); memLog={}; renderLog(); };
+$('clearLog').onclick=()=>{ try{if(window.confirm&&!window.confirm('清除全部每日记录？'))return;}catch(e){} saveLog({}); memLog={}; state.punchedOutAt=null; renderLog(); render(); };
 renderLog();
 
 render();
