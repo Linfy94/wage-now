@@ -48,7 +48,11 @@
     background:linear-gradient(180deg,rgba(91,140,196,.06),transparent 40%);pointer-events:none}
   .fx{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1}
   .gauge>.label,.gauge>.amount,.gauge>.rate,.gauge>.drainMeter,.gauge>.status,.gauge>.punch{position:relative;z-index:2}
-  .coin{position:absolute;bottom:6px;opacity:0;user-select:none;will-change:transform,opacity}
+  .coin{position:absolute;bottom:6px;opacity:0;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(circle at 36% 30%,#ffe79a,#f5c518 56%,#c89009);color:#7a5206;
+    font-family:var(--mono);font-weight:800;line-height:1;
+    box-shadow:0 0 7px rgba(245,197,24,.55),inset 0 -2px 3px rgba(140,100,8,.45);
+    will-change:transform,opacity;user-select:none}
   .coin.up{animation:floatUp linear forwards}
   @keyframes floatUp{0%{opacity:0;transform:translateY(0) scale(.5)}20%{opacity:.95}100%{opacity:0;transform:translateY(-96px) scale(1.05)}}
   .drainMeter{display:none;margin-top:10px;font-family:var(--mono);font-size:14px;color:var(--red);letter-spacing:.03em}
@@ -468,16 +472,43 @@ function render(){
 }
 
 // 交互
+// —— 设置持久化：记住用户上次填写的参数 ——
+function saveSettings(){
+  try{
+    localStorage.setItem('wage_settings_v1', JSON.stringify({
+      mode:state.mode, monthly:$('i_monthly').value, days:$('i_days').value, hourly:$('i_hourly').value,
+      otpaid:$('i_otpaid').checked, start:$('i_start').value, end:$('i_end').value,
+      lunchS:$('i_lunchS').value, lunchE:$('i_lunchE').value, otStart:$('i_otStart').value,
+      wdMult:$('i_wdMult').value, reMult:$('i_reMult').value
+    }));
+  }catch(e){}
+}
+function loadSettings(){
+  let s; try{ const raw=localStorage.getItem('wage_settings_v1'); s=raw?JSON.parse(raw):null; }catch(e){ s=null; }
+  if(!s) return false;
+  const set=(id,v)=>{ if(v!=null&&v!=='') $(id).value=v; };
+  set('i_monthly',s.monthly); set('i_days',s.days); set('i_hourly',s.hourly);
+  set('i_start',s.start); set('i_end',s.end); set('i_lunchS',s.lunchS); set('i_lunchE',s.lunchE);
+  set('i_otStart',s.otStart); set('i_wdMult',s.wdMult); set('i_reMult',s.reMult);
+  if(s.otpaid!=null) $('i_otpaid').checked=s.otpaid;
+  if(s.mode){
+    state.mode=s.mode;
+    document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.toggle('on',x.dataset.mode===s.mode));
+    document.querySelectorAll('.mode-only').forEach(el=>el.classList.toggle('show',el.dataset.for===s.mode));
+  }
+  return true;
+}
+
 document.querySelectorAll('#modeSeg button').forEach(b=>{ b.onclick=()=>{
   document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
   document.querySelectorAll('.mode-only').forEach(el=>el.classList.toggle('show',el.dataset.for===b.dataset.mode));
-  render();
+  render(); saveSettings();
 };});
 document.querySelectorAll('#daySeg button').forEach(b=>{ b.onclick=()=>{
   document.querySelectorAll('#daySeg button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
   state.isWorkday=b.dataset.wd==='1'; render();
 };});
-document.querySelectorAll('input').forEach(i=>i.addEventListener('input',render));
+document.querySelectorAll('input').forEach(i=>i.addEventListener('input',()=>{ render(); saveSettings(); }));
 $('setHead').onclick=()=>$('settings').classList.toggle('open');
 $('i_anchorOn').onchange=()=>{
   const on=$('i_anchorOn').checked;
@@ -510,10 +541,18 @@ function fillDays(){
   }else{
     $('daysHint').textContent=`${y}年暂无内置节假日数据，请手动填写（法定固定基数为 21.75）`;
   }
-  render();
+  render(); saveSettings();
 }
 $('daysAuto').onclick=fillDays;
-fillDays();
+// 优先恢复上次设置；首次使用则按当月自动填计薪天数
+if(loadSettings()){
+  const _n=new Date(), _wd=workdaysInMonth(_n.getFullYear(),_n.getMonth()+1);
+  $('daysHint').textContent = _wd!=null
+    ? `已恢复上次设置 · 本月工作日参考 ${_wd} 天，可点「↻ 按本月」重算`
+    : `已恢复上次设置`;
+}else{
+  fillDays();
+}
 
 // 按周几自动初始化今天类型
 (function(){
@@ -588,15 +627,17 @@ renderLog();
 render();
 setInterval(render,200);
 
-// 金币动效：进账时 🪙 上浮积累
+// 金币动效：进账时金色 ¥ 圆币上浮积累
 function spawnCoin(){
   const fx=$('fx'); if(!fx) return;
   const el=document.createElement('span');
-  el.className='coin up'; el.textContent='🪙';
+  el.className='coin up'; el.textContent='¥';
   el.style.left=(8+Math.random()*84)+'%';
+  const size=16+Math.random()*10;
+  el.style.width=el.style.height=size+'px';
+  el.style.fontSize=(size*0.52)+'px';
   const dur=1200+Math.random()*700;
   el.style.animationDuration=dur+'ms';
-  el.style.fontSize=(15+Math.random()*13)+'px';
   fx.appendChild(el);
   setTimeout(()=>el.remove(),dur+60);
 }
