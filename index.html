@@ -264,7 +264,7 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const state = { mode:'monthly', isWorkday:true, anchorStart:null };
+const state = { mode:'monthly', isWorkday:true, anchorStart:null, punchedOutAt:null };
 let fxMode=null;
 
 function parseTime(str){ const [h,m]=(str||'00:00').split(':').map(Number); const d=new Date(); d.setHours(h,m,0,0); return d; }
@@ -287,7 +287,8 @@ function read(){
 
 function compute(){
   read();
-  const now=new Date();
+  const realNow=new Date();
+  const now=state.punchedOutAt?new Date(Math.min(realNow.getTime(),state.punchedOutAt)):realNow;
   // —— 构建班次时间轴：支持打卡锚点 + 跨日 ——
   const sStr=$('i_start').value,eStr=$('i_end').value,lsStr=$('i_lunchS').value,leStr=$('i_lunchE').value,otStr=$('i_otStart').value;
   const startMin=(()=>{const[h,m]=sStr.split(':').map(Number);return h*60+m;})();
@@ -363,7 +364,8 @@ function compute(){
     realHourly = officeH>0 ? earned/officeH : baseHourly;
   }
 
-  return {now,phase,earned,perMin,realHourly,stdHourly,baseHourly,officeH,overH,bufferH,normalH,
+  if(state.punchedOutAt){phase='off';perMin=0;}
+  return {now:realNow,phase,earned,perMin,realHourly,stdHourly,baseHourly,officeH,overH,bufferH,normalH,
           stdHours,daily,R0,R1,otValuePaid:baseHourly*state.wdMult*overH,
           otStdValue:stdHourly*overH, otStart, anchored:!!anchor};
 }
@@ -413,6 +415,7 @@ function render(){
     if(r.perMin>0){ $('rate').innerHTML=`每分钟 <b style="color:var(--green)">¥${fmt(r.perMin)}</b> 进账`; }
     else if(r.phase==='buffer'){ $('rate').innerHTML=`<b style="color:var(--amber)">¥0.00</b> · 缓冲期不计费`; }
     else if(r.phase==='lunch'){ $('rate').innerHTML=`午休中 · 暂停计薪`; }
+    else if(r.phase==='off'){ $('rate').innerHTML=`收工 · 今日计薪已锁定`; }
     else { $('rate').innerHTML=`等待开工`; }
   }
 
@@ -619,6 +622,7 @@ function renderLog(){
 $('punchOutBtn').onclick=()=>{
   const r=compute();
   if(r.officeH<=0){ $('logNote').textContent='当前没有在岗时长，暂无法记录'; return; }
+  state.punchedOutAt=Date.now();
   const key=todayKey(), log=loadLog();
   log[key]={date:key,officeH:r.officeH,normalH:r.normalH,overH:r.overH,earned:r.earned,effHourly:r.earned/r.officeH,stdHourly:r.stdHourly,mode:state.mode,isWorkday:state.isWorkday};
   saveLog(log); renderLog();
