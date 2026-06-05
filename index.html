@@ -855,18 +855,16 @@ function loadScript(src){
     const s=document.createElement('script');
     s.src=src;
     s.onload=resolve;
-    s.onerror=()=>{ delete _scriptCache[src]; reject(new Error('脚本加载失败')); };
+    s.onerror=()=>{ delete _scriptCache[src]; reject(new Error('load error')); };
     document.head.appendChild(s);
   });
   return _scriptCache[src];
 }
-// 页面加载完成后静默预加载（让首次点击时脚本已就绪）
-window.addEventListener('load',()=>{
-  setTimeout(()=>{
-    if(typeof html2canvas==='undefined') loadScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js').catch(()=>{});
-    if(typeof QRCode==='undefined') loadScript('https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js').catch(()=>{});
-  },800);
-});
+// 尝试主 CDN，失败则自动切换到备用 CDN
+async function loadScriptWithFallback(primary,fallback){
+  try{ await loadScript(primary); }
+  catch(e){ await loadScript(fallback); }
+}
 
 async function generateReport(){
   // 立即打开弹层，告知用户正在加载
@@ -875,13 +873,17 @@ async function generateReport(){
   $('shareImgWrap').style.display='none';
   openShareModal();
 
-  // 按需加载两个库
+  // 按需加载两个库（jsdelivr 失败自动切 unpkg）
   try{
     await Promise.all([
       typeof html2canvas!=='undefined'?Promise.resolve()
-        :loadScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'),
+        :loadScriptWithFallback(
+            'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
+            'https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js'),
       typeof QRCode!=='undefined'?Promise.resolve()
-        :loadScript('https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js')
+        :loadScriptWithFallback(
+            'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js',
+            'https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js')
     ]);
   }catch(e){
     $('shareLoading').textContent='组件加载失败，请检查网络后重试';
