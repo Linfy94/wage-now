@@ -163,22 +163,25 @@
     letter-spacing:.03em;transition:border-color .15s,color .15s}
   #shareBtn:hover{border-color:#5b8cc4;color:#e7edf3}
   #shareBtn:active{background:#1a212a}
-  .share-modal{position:fixed;inset:0;z-index:200;background:rgba(12,16,20,.92);
-    display:none;align-items:center;justify-content:center;padding:20px;overflow-y:auto}
+  .share-modal{position:fixed;inset:0;z-index:200;background:rgba(12,16,20,.94);
+    display:none;align-items:flex-start;justify-content:center;
+    padding:20px 20px 40px;overflow-y:auto;-webkit-overflow-scrolling:touch}
   .share-modal.show{display:flex}
-  .share-inner{width:100%;max-width:400px}
+  body.modal-open{overflow:hidden;position:fixed;width:100%}
+  .share-inner{width:100%;max-width:400px;padding-top:16px}
+  .share-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .share-title{font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.12em;color:#7e8b9a;text-transform:uppercase}
+  .share-x{width:34px;height:34px;border-radius:50%;background:#2e3947;border:0;
+    color:#e7edf3;font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .share-x:active{background:#3e4f63}
   .share-img-wrap img{width:100%;border-radius:10px;display:block}
   .share-hint{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#56616f;
     text-align:center;margin-top:11px;letter-spacing:.04em}
   .share-loading{text-align:center;padding:52px 0;font-family:'JetBrains Mono',monospace;
     font-size:13px;color:#7e8b9a;letter-spacing:.05em}
-  .share-close-row{text-align:center;margin-top:16px}
-  .share-close-btn{font-family:'JetBrains Mono',monospace;font-size:11px;color:#56616f;
-    cursor:pointer;letter-spacing:.06em;text-decoration:underline;
-    text-decoration-style:dotted;text-underline-offset:3px}
-  .share-dl-btn{display:block;margin:10px auto 0;text-align:center;
+  .share-dl-btn{display:block;margin:12px auto 0;text-align:center;
     background:#5b8cc4;color:#06121f;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;
-    font-weight:700;font-size:14px;padding:11px 28px;border-radius:9px;
+    font-weight:700;font-size:14px;padding:12px 28px;border-radius:9px;
     text-decoration:none;letter-spacing:.04em}
 
   /* --- 配置引导覆盖层 --- */
@@ -415,7 +418,7 @@
   </div>
 
   <div style="border-top:1px solid #232c37;padding-top:16px;display:flex;align-items:center;gap:14px;">
-    <img id="sc_qr" width="72" height="72" style="border-radius:5px;flex-shrink:0;display:block;" alt="">
+    <div id="sc_qr" style="width:72px;height:72px;border-radius:5px;flex-shrink:0;background:#0c1014;"></div>
     <div style="flex:1;min-width:0;">
       <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#7e8b9a;margin-bottom:4px;">扫码 · 算算你今天赚了多少</div>
       <div id="sc_url" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#56616f;word-break:break-all;"></div>
@@ -426,14 +429,15 @@
 <!-- 战报预览浮层 -->
 <div id="shareModal" class="share-modal">
   <div class="share-inner">
+    <div class="share-topbar">
+      <div class="share-title">今日战报</div>
+      <button id="shareClose" class="share-x" aria-label="关闭">&#x2715;</button>
+    </div>
     <div id="shareLoading" class="share-loading">正在生成…</div>
     <div id="shareImgWrap" class="share-img-wrap" style="display:none">
       <img id="shareImg" alt="今日战报">
       <div id="shareHint" class="share-hint"></div>
       <a id="shareDlBtn" class="share-dl-btn" download="今日战报.png" style="display:none">下载图片</a>
-    </div>
-    <div class="share-close-row">
-      <span id="shareClose" class="share-close-btn">关闭</span>
     </div>
   </div>
 </div>
@@ -860,7 +864,7 @@ async function generateReport(){
   $('shareLoading').textContent='正在加载组件…';
   $('shareLoading').style.display='block';
   $('shareImgWrap').style.display='none';
-  $('shareModal').classList.add('show');
+  openShareModal();
 
   // 按需加载两个库
   try{
@@ -940,32 +944,42 @@ async function generateReport(){
   }
   $('sc_slogan').textContent=slogan;
 
-  // 二维码：用 toDataURL 输出 data URL 赋给 img，html2canvas 对 img 更可靠
+  // 二维码：单独渲染到临时 canvas，截图后手动合成，完全绕开 html2canvas 的 img/CORS 限制
   const url=(location.href||'').split('?')[0].split('#')[0];
   $('sc_url').textContent=url;
-  const qrEl=$('sc_qr');
+  const qrPlaceholder=$('sc_qr');
+  const qrTmpCanvas=document.createElement('canvas');
+  let qrOk=false;
   try{
-    const qrDataUrl=await QRCode.toDataURL(url||'https://wage-now.netlify.app', {
+    await QRCode.toCanvas(qrTmpCanvas, url||'https://wage-now.netlify.app', {
       width:72, margin:1,
       color:{dark:'#c8d5e0', light:'#0c1014'}
     });
-    qrEl.src=qrDataUrl;
-    await new Promise(res=>{ qrEl.onload=res; qrEl.onerror=res; });
-  }catch(e){ qrEl.style.display='none'; }
+    qrOk=true;
+  }catch(e){}
 
-  // 等图像绘制后再截图
-  await new Promise(res=>setTimeout(res,80));
+  // 截图前测量 QR 占位块在卡片内的偏移（卡片在屏外时偏移量依然正确）
+  const cardEl=$('shareCard');
+  const cardRect=cardEl.getBoundingClientRect();
+  const qrRect=qrPlaceholder.getBoundingClientRect();
+  const qrOffX=qrRect.left-cardRect.left;
+  const qrOffY=qrRect.top-cardRect.top;
+
+  await new Promise(res=>setTimeout(res,60));
   try{
-    const canvas=await html2canvas($('shareCard'),{
-      backgroundColor:'#0c1014', scale:2, logging:false, useCORS:true,
+    const mainCanvas=await html2canvas(cardEl,{
+      backgroundColor:'#0c1014', scale:2, logging:false,
       onclone:(doc)=>{ doc.getElementById('shareCard').style.left='0'; }
     });
-    const imgSrc=canvas.toDataURL('image/png');
+    // 将 QR 合成到截图结果
+    if(qrOk){
+      const sc=2;
+      mainCanvas.getContext('2d').drawImage(qrTmpCanvas, qrOffX*sc, qrOffY*sc, 72*sc, 72*sc);
+    }
+    const imgSrc=mainCanvas.toDataURL('image/png');
     $('shareImg').src=imgSrc;
     $('shareLoading').style.display='none';
     $('shareImgWrap').style.display='block';
-
-    // 根据设备类型给出不同的保存引导
     const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
     if(isMobile){
       $('shareHint').textContent='长按图片 · 保存 / 转发给好友';
@@ -973,9 +987,7 @@ async function generateReport(){
     }else{
       $('shareHint').textContent='点下方按钮下载，或右键图片另存为';
       const dlBtn=$('shareDlBtn');
-      dlBtn.href=imgSrc;
-      dlBtn.style.display='block';
-      // 自动触发一次下载（部分浏览器会拦截，用户可手动点按钮）
+      dlBtn.href=imgSrc; dlBtn.style.display='block';
       const a=document.createElement('a');
       a.href=imgSrc; a.download='今日战报.png'; a.click();
     }
@@ -983,9 +995,12 @@ async function generateReport(){
     $('shareLoading').textContent='生成失败，请重试（'+e.message+')';
   }
 }
+
+function openShareModal(){ $('shareModal').classList.add('show'); document.body.classList.add('modal-open'); }
+function closeShareModal(){ $('shareModal').classList.remove('show'); document.body.classList.remove('modal-open'); }
 $('shareBtn').onclick=generateReport;
-$('shareClose').onclick=()=>$('shareModal').classList.remove('show');
-$('shareModal').addEventListener('click',e=>{ if(e.target===$('shareModal')) $('shareModal').classList.remove('show'); });
+$('shareClose').onclick=closeShareModal;
+$('shareModal').addEventListener('click',e=>{ if(e.target===$('shareModal')) closeShareModal(); });
 
 // 金币动效：进账时金色 ¥ 圆币上浮积累
 function spawnCoin(){
