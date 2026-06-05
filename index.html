@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <style>
   :root{
     --bg:#0c1014; --panel:#141a21; --panel2:#1a212a;
@@ -155,6 +157,28 @@
   .logfoot{display:flex;align-items:center;justify-content:space-between;gap:10px;font-family:var(--mono);font-size:10.5px;color:var(--faint)}
   .foot{text-align:center;margin-top:26px;font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.1em;line-height:1.8}
 
+  /* --- 战报分享 --- */
+  #shareBtn{position:relative;z-index:2;margin-top:14px;display:inline-flex;align-items:center;gap:6px;
+    background:transparent;border:1px solid #2e3947;color:#7e8b9a;
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+    font-size:12.5px;padding:7px 15px;border-radius:8px;cursor:pointer;
+    letter-spacing:.03em;transition:border-color .15s,color .15s}
+  #shareBtn:hover{border-color:#5b8cc4;color:#e7edf3}
+  #shareBtn:active{background:#1a212a}
+  .share-modal{position:fixed;inset:0;z-index:200;background:rgba(12,16,20,.92);
+    display:none;align-items:center;justify-content:center;padding:20px;overflow-y:auto}
+  .share-modal.show{display:flex}
+  .share-inner{width:100%;max-width:400px}
+  .share-img-wrap img{width:100%;border-radius:10px;display:block}
+  .share-hint{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#56616f;
+    text-align:center;margin-top:11px;letter-spacing:.04em}
+  .share-loading{text-align:center;padding:52px 0;font-family:'JetBrains Mono',monospace;
+    font-size:13px;color:#7e8b9a;letter-spacing:.05em}
+  .share-close-row{text-align:center;margin-top:16px}
+  .share-close-btn{font-family:'JetBrains Mono',monospace;font-size:11px;color:#56616f;
+    cursor:pointer;letter-spacing:.06em;text-decoration:underline;
+    text-decoration-style:dotted;text-underline-offset:3px}
+
   /* --- 配置引导覆盖层 --- */
   .onboard{position:fixed;inset:0;background:var(--bg);z-index:100;display:none;
     align-items:flex-start;justify-content:center;padding:32px 18px 60px;overflow-y:auto}
@@ -267,6 +291,7 @@
       <input type="datetime-local" id="i_anchor" class="dtin" style="display:none">
       <span class="punchInfo" id="punchInfo">干到跨日 / 通宵时勾选，并把上班时刻校准到真实开始时间</span>
     </div>
+    <button id="shareBtn">生成今日战报</button>
     <div class="fx" id="fx"></div>
   </div>
 
@@ -344,6 +369,70 @@
   </div>
 
   <div class="foot">数据仅保存在你的浏览器本地 · 不上传服务器 · 换设备或清除缓存会重置<br>时薪计 · 内测体验版</div>
+</div>
+
+<!-- 战报卡片：渲染区（屏外） -->
+<div id="shareCard" style="position:absolute;left:-5000px;top:0;width:375px;background:#0c1014;color:#e7edf3;padding:32px 24px 26px;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;">
+  <div style="font-family:'JetBrains Mono',monospace;font-weight:800;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:#56616f;margin-bottom:3px;">时薪计 / WAGE&middot;NOW</div>
+  <div id="sc_date" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#7e8b9a;letter-spacing:.04em;margin-bottom:26px;"></div>
+
+  <div id="sc_amountLabel" style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#56616f;margin-bottom:8px;"></div>
+  <div id="sc_amount" style="font-family:'JetBrains Mono',monospace;font-weight:800;font-size:56px;line-height:1;letter-spacing:-.02em;margin-bottom:7px;"></div>
+  <div id="sc_rate" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#7e8b9a;margin-bottom:22px;"></div>
+
+  <div style="border-top:1px solid #232c37;margin-bottom:18px;"></div>
+
+  <div style="display:flex;gap:1px;background:#232c37;border-radius:10px 10px 0 0;overflow:hidden;margin-bottom:1px;">
+    <div style="flex:1;background:#141a21;padding:12px 14px;">
+      <div style="font-size:9.5px;color:#56616f;font-family:'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px;">真实时薪</div>
+      <div id="sc_realHourly" style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;"></div>
+    </div>
+    <div style="flex:1;background:#141a21;padding:12px 14px;">
+      <div style="font-size:9.5px;color:#56616f;font-family:'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px;">标准时薪</div>
+      <div id="sc_stdHourly" style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:#e7edf3;"></div>
+    </div>
+  </div>
+  <div style="display:flex;gap:1px;background:#232c37;border-radius:0 0 10px 10px;overflow:hidden;margin-bottom:18px;">
+    <div style="flex:1;background:#141a21;padding:12px 14px;">
+      <div style="font-size:9.5px;color:#56616f;font-family:'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px;">已在岗</div>
+      <div id="sc_officeH" style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:#e7edf3;"></div>
+    </div>
+    <div style="flex:1;background:#141a21;padding:12px 14px;">
+      <div id="sc_overLabel" style="font-size:9.5px;color:#56616f;font-family:'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px;">加班时长</div>
+      <div id="sc_overH" style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:#e7edf3;"></div>
+    </div>
+  </div>
+
+  <div id="sc_drainBox" style="display:none;background:rgba(124,47,52,.25);border:1px solid #7c2f34;border-radius:9px;padding:11px 14px;margin-bottom:16px;">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#e5484d;margin-bottom:4px;">正在白干流失</div>
+    <div id="sc_drainAmt" style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:#e5484d;"></div>
+  </div>
+
+  <div style="background:#141a21;border:1px solid #2e3947;border-radius:9px;padding:13px 15px;margin-bottom:22px;">
+    <div id="sc_slogan" style="font-size:13px;line-height:1.75;color:#e7edf3;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;"></div>
+  </div>
+
+  <div style="border-top:1px solid #232c37;padding-top:16px;display:flex;align-items:center;gap:14px;">
+    <canvas id="sc_qr" width="72" height="72" style="border-radius:5px;flex-shrink:0;"></canvas>
+    <div style="flex:1;min-width:0;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#7e8b9a;margin-bottom:4px;">扫码 · 算算你今天赚了多少</div>
+      <div id="sc_url" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#56616f;word-break:break-all;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 战报预览浮层 -->
+<div id="shareModal" class="share-modal">
+  <div class="share-inner">
+    <div id="shareLoading" class="share-loading">正在生成…</div>
+    <div id="shareImgWrap" class="share-img-wrap" style="display:none">
+      <img id="shareImg" alt="今日战报">
+      <div class="share-hint">长按图片 · 保存 / 转发给好友</div>
+    </div>
+    <div class="share-close-row">
+      <span id="shareClose" class="share-close-btn">关闭</span>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -750,6 +839,113 @@ renderLog();
 
 render();
 setInterval(render,200);
+
+// 战报分享
+async function generateReport(){
+  if(typeof html2canvas==='undefined'||typeof QRCode==='undefined'){
+    alert('组件尚未加载完成，请稍候再试'); return;
+  }
+  const r=compute();
+  const isPaid=state.mode==='hourly'||state.otPaid;
+  const drain=state.mode==='monthly'&&!isPaid&&(r.phase==='over'||r.phase==='restUnpaid');
+  const isPunchedOut=!!state.punchedOutAt;
+
+  // 日期 & 模式标签
+  const now=new Date(), _p=x=>String(x).padStart(2,'0');
+  const dateStr=`${now.getFullYear()}-${_p(now.getMonth()+1)}-${_p(now.getDate())}`;
+  $('sc_date').textContent=`${dateStr} · ${isPunchedOut?'今日战报':'实时进度'}`;
+
+  // 取金额：已打卡优先用日志数据
+  const log=loadLog(), todayLog=log[dateStr];
+  const earnedVal=isPunchedOut&&todayLog?todayLog.earned:r.earned;
+  $('sc_amountLabel').textContent=isPunchedOut?'今天到手':'现在已赚';
+  $('sc_amount').textContent='¥'+fmt(earnedVal);
+  $('sc_amount').style.color=drain?'#e5484d':'#e7edf3';
+
+  // 进账速率
+  if(r.phase==='off'||r.phase==='pre'){
+    $('sc_rate').textContent=r.phase==='off'?'已收工':'暂未开始';
+  }else if(r.perMin>0){
+    $('sc_rate').textContent=`每分钟 ¥${fmt(r.perMin)} 进账`;
+  }else if(r.phase==='lunch'){
+    $('sc_rate').textContent='午休中 · 暂停计薪';
+  }else{
+    $('sc_rate').textContent='暂无进账';
+  }
+
+  // 指标
+  $('sc_realHourly').textContent='¥'+fmt(r.realHourly);
+  $('sc_realHourly').style.color=drain?'#e5484d':'#e7edf3';
+  $('sc_stdHourly').textContent='¥'+fmt(r.stdHourly);
+  $('sc_officeH').textContent=fmtDurT(r.officeH*60);
+  const otMin=state.isWorkday?(r.overH+r.bufferH)*60:r.officeH*60;
+  $('sc_overH').textContent=fmtDurT(otMin);
+  $('sc_overLabel').textContent=state.isWorkday?'加班时长':'白干时长';
+
+  // 白干流失框
+  if(drain){
+    $('sc_drainBox').style.display='block';
+    $('sc_drainAmt').textContent='¥'+fmt(r.otStdValue);
+  }else{
+    $('sc_drainBox').style.display='none';
+  }
+
+  // 动态文案
+  let slogan='';
+  const stH=fmtDurT(r.stdHourly*100/100), offStr=fmtDurT(r.officeH*60), otStr=fmtDurT(r.overH*60);
+  const pctDrain=r.stdHourly>0?((1-r.realHourly/r.stdHourly)*100).toFixed(0):0;
+  if(r.phase==='pre') slogan='今天还没开始上班';
+  else if(r.phase==='work') slogan=`今天已进账 ¥${fmt(r.earned)}，每分钟还在涨`;
+  else if(r.phase==='lunch') slogan=`午休中，今天已赚 ¥${fmt(r.earned)}`;
+  else if(r.phase==='buffer') slogan=`刚下班，今天到手 ¥${fmt(r.earned)}`;
+  else if(r.phase==='over'&&isPaid) slogan=`加班 ${otStr}，加班费已进账 ¥${fmt(r.otValuePaid||0)}，继续涨`;
+  else if(r.phase==='over'&&!isPaid) slogan=`加班 ${otStr}，时薪从 ¥${fmt(r.stdHourly)} 缩到 ¥${fmt(r.realHourly)}（-${pctDrain}%），白送了 ¥${fmt(r.otStdValue)}`;
+  else if(r.phase==='restUnpaid') slogan=`休息日白干 ${offStr}，白送 ¥${fmt(r.otStdValue||r.officeH*r.stdHourly)}，时薪拉低到 ¥${fmt(r.R1)}`;
+  else if(r.phase==='restPaid') slogan=`休息日赚了 ¥${fmt(r.earned)}，全是额外收入`;
+  else if(r.phase==='off'){
+    if(todayLog) slogan=`今天到手 ¥${fmt(todayLog.earned)}，实得时薪 ¥${fmt(todayLog.effHourly)}/时`;
+    else slogan='今天已收工';
+  }
+  $('sc_slogan').textContent=slogan;
+
+  // 二维码
+  const url=(location.href||'').split('?')[0].split('#')[0];
+  $('sc_url').textContent=url;
+  const qrEl=$('sc_qr');
+  try{
+    await QRCode.toCanvas(qrEl, url||'https://wage-now.netlify.app', {
+      width:72, margin:1,
+      color:{dark:'#c8d5e0', light:'#0c1014'}
+    });
+  }catch(e){ qrEl.style.display='none'; }
+
+  // 显示弹层 loading 态
+  $('shareLoading').style.display='block';
+  $('shareLoading').textContent='正在生成…';
+  $('shareImgWrap').style.display='none';
+  $('shareModal').classList.add('show');
+
+  // 等 QR 绘制完成后再截图
+  await new Promise(res=>setTimeout(res,80));
+  try{
+    const canvas=await html2canvas($('shareCard'),{
+      backgroundColor:'#0c1014', scale:2, logging:false, useCORS:true,
+      onclone:(doc)=>{
+        // 确保卡片在克隆文档中不被裁剪
+        doc.getElementById('shareCard').style.left='0';
+      }
+    });
+    const imgSrc=canvas.toDataURL('image/png');
+    $('shareImg').src=imgSrc;
+    $('shareLoading').style.display='none';
+    $('shareImgWrap').style.display='block';
+  }catch(e){
+    $('shareLoading').textContent='生成失败，请重试（'+e.message+')';
+  }
+}
+$('shareBtn').onclick=generateReport;
+$('shareClose').onclick=()=>$('shareModal').classList.remove('show');
+$('shareModal').addEventListener('click',e=>{ if(e.target===$('shareModal')) $('shareModal').classList.remove('show'); });
 
 // 金币动效：进账时金色 ¥ 圆币上浮积累
 function spawnCoin(){
