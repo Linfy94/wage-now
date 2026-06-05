@@ -848,16 +848,25 @@ render();
 setInterval(render,200);
 
 // 战报分享
+const _scriptCache={};
 function loadScript(src){
-  return new Promise((resolve,reject)=>{
-    if(document.querySelector('script[data-lib="'+src+'"]')){resolve();return;}
+  if(_scriptCache[src]) return _scriptCache[src];
+  _scriptCache[src]=new Promise((resolve,reject)=>{
     const s=document.createElement('script');
-    s.src=src; s.dataset.lib=src;
+    s.src=src;
     s.onload=resolve;
-    s.onerror=()=>reject(new Error('脚本加载失败'));
+    s.onerror=()=>{ delete _scriptCache[src]; reject(new Error('脚本加载失败')); };
     document.head.appendChild(s);
   });
+  return _scriptCache[src];
 }
+// 页面加载完成后静默预加载（让首次点击时脚本已就绪）
+window.addEventListener('load',()=>{
+  setTimeout(()=>{
+    if(typeof html2canvas==='undefined') loadScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js').catch(()=>{});
+    if(typeof QRCode==='undefined') loadScript('https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js').catch(()=>{});
+  },800);
+});
 
 async function generateReport(){
   // 立即打开弹层，告知用户正在加载
@@ -944,38 +953,36 @@ async function generateReport(){
   }
   $('sc_slogan').textContent=slogan;
 
-  // 二维码：单独渲染到临时 canvas，截图后手动合成，完全绕开 html2canvas 的 img/CORS 限制
+  // 二维码：渲染到临时 canvas → 转 data URL → 替换占位 div 为 <img>
+  // html2canvas 直接捕获 img[src="data:..."]，不需要 useCORS，无跨域问题
   const url=(location.href||'').split('?')[0].split('#')[0];
   $('sc_url').textContent=url;
   const qrPlaceholder=$('sc_qr');
-  const qrTmpCanvas=document.createElement('canvas');
-  let qrOk=false;
+  let qrImg=null;
   try{
-    await QRCode.toCanvas(qrTmpCanvas, url||'https://wage-now.netlify.app', {
+    const qrTmpCanvas=document.createElement('canvas');
+    await QRCode.toCanvas(qrTmpCanvas, url||'https://wagenow.netlify.app', {
       width:72, margin:1,
       color:{dark:'#c8d5e0', light:'#0c1014'}
     });
-    qrOk=true;
-  }catch(e){}
+    qrImg=document.createElement('img');
+    qrImg.style.cssText='width:72px;height:72px;border-radius:5px;flex-shrink:0;display:block;';
+    qrImg.src=qrTmpCanvas.toDataURL('image/png');
+    await new Promise(r=>{ qrImg.onload=r; qrImg.onerror=r; });
+    // 截图前把 img 换进 DOM（html2canvas 会连同 img 一起渲染）
+    qrPlaceholder.parentNode.replaceChild(qrImg, qrPlaceholder);
+  }catch(e){ qrImg=null; }
 
-  // 截图前测量 QR 占位块在卡片内的偏移（卡片在屏外时偏移量依然正确）
   const cardEl=$('shareCard');
-  const cardRect=cardEl.getBoundingClientRect();
-  const qrRect=qrPlaceholder.getBoundingClientRect();
-  const qrOffX=qrRect.left-cardRect.left;
-  const qrOffY=qrRect.top-cardRect.top;
-
   await new Promise(res=>setTimeout(res,60));
   try{
     const mainCanvas=await html2canvas(cardEl,{
       backgroundColor:'#0c1014', scale:2, logging:false,
       onclone:(doc)=>{ doc.getElementById('shareCard').style.left='0'; }
     });
-    // 将 QR 合成到截图结果
-    if(qrOk){
-      const sc=2;
-      mainCanvas.getContext('2d').drawImage(qrTmpCanvas, qrOffX*sc, qrOffY*sc, 72*sc, 72*sc);
-    }
+    // 恢复占位 div
+    if(qrImg&&qrImg.parentNode) qrImg.parentNode.replaceChild(qrPlaceholder, qrImg);
+
     const imgSrc=mainCanvas.toDataURL('image/png');
     $('shareImg').src=imgSrc;
     $('shareLoading').style.display='none';
@@ -992,6 +999,7 @@ async function generateReport(){
       a.href=imgSrc; a.download='今日战报.png'; a.click();
     }
   }catch(e){
+    if(qrImg&&qrImg.parentNode) qrImg.parentNode.replaceChild(qrPlaceholder, qrImg);
     $('shareLoading').textContent='生成失败，请重试（'+e.message+')';
   }
 }
