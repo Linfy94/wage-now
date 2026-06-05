@@ -154,9 +154,93 @@
   .chartbox{margin:4px 0 12px} .chartbox svg{width:100%;height:auto;display:block}
   .logfoot{display:flex;align-items:center;justify-content:space-between;gap:10px;font-family:var(--mono);font-size:10.5px;color:var(--faint)}
   .foot{text-align:center;margin-top:26px;font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.1em;line-height:1.8}
+
+  /* --- 配置引导覆盖层 --- */
+  .onboard{position:fixed;inset:0;background:var(--bg);z-index:100;display:none;
+    align-items:flex-start;justify-content:center;padding:32px 18px 60px;overflow-y:auto}
+  .onboard.show{display:flex;animation:obIn .3s ease forwards}
+  .onboard.hide{animation:obOut .22s ease forwards}
+  @keyframes obIn{from{opacity:0}to{opacity:1}}
+  @keyframes obOut{from{opacity:1}to{opacity:0}}
+  .ob-card{width:100%;max-width:480px}
+  .ob-logo{font-family:var(--mono);font-weight:800;font-size:12px;letter-spacing:.22em;
+    text-transform:uppercase;color:var(--dim);margin-bottom:32px}
+  .ob-logo b{color:var(--blue)}
+  .ob-title{font-size:20px;font-weight:700;margin-bottom:8px}
+  .ob-desc{font-size:13px;color:var(--dim);margin-bottom:10px;line-height:1.65}
+  .ob-privacy{font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.03em;
+    padding:9px 12px;border-radius:8px;border:1px solid var(--line);
+    background:var(--panel);margin-bottom:26px}
+  .ob-group{margin-bottom:22px}
+  .ob-glabel{font-family:var(--mono);font-size:10px;letter-spacing:.18em;
+    color:var(--faint);text-transform:uppercase;margin-bottom:10px}
+  .ob-seg{display:flex;background:var(--bg);border:1px solid var(--line2);border-radius:9px;padding:3px}
+  .ob-seg button{flex:1;background:transparent;border:0;color:var(--dim);
+    font-family:var(--cn);font-size:13px;padding:9px;border-radius:7px;cursor:pointer;font-weight:500}
+  .ob-seg button.on{background:var(--panel2);color:var(--text)}
+  .ob-field{margin-bottom:14px}
+  .ob-field label{display:block;font-size:12px;color:var(--dim);margin-bottom:7px}
+  .ob-field input{width:100%;background:var(--bg);border:1px solid var(--line2);
+    color:var(--text);font-family:var(--mono);font-size:15px;
+    padding:11px 13px;border-radius:9px;outline:none;
+    -webkit-appearance:none;appearance:none;transition:border-color .15s}
+  .ob-field input:focus{border-color:var(--blue);background:#0a0e13}
+  .ob-field input.err{border-color:var(--red);animation:obShake .28s}
+  @keyframes obShake{0%,100%{transform:translateX(0)}30%{transform:translateX(-7px)}70%{transform:translateX(7px)}}
+  .ob-row{display:flex;gap:12px}.ob-row .ob-field{flex:1;min-width:0}
+  .ob-btn{width:100%;background:var(--blue);border:0;color:#06121f;
+    font-family:var(--cn);font-weight:700;font-size:15px;
+    padding:14px;border-radius:10px;cursor:pointer;
+    margin-top:6px;letter-spacing:.04em;transition:filter .15s}
+  .ob-btn:active{filter:brightness(.9)}
+  .ob-skip{display:block;text-align:center;font-family:var(--mono);
+    font-size:11px;color:var(--faint);cursor:pointer;margin-top:18px;
+    letter-spacing:.05em;text-decoration:underline;
+    text-decoration-style:dotted;text-underline-offset:3px}
 </style>
 </head>
 <body>
+<div class="onboard" id="onboard">
+  <div class="ob-card">
+    <div class="ob-logo">时薪计 <b>/</b> WAGE·NOW</div>
+    <div class="ob-title">先设置一下薪资参数</div>
+    <div class="ob-desc">完成后即可实时查看今天赚了多少，以及加班对时薪的影响。</div>
+    <div class="ob-privacy">数据仅保存在本机浏览器 · 不上传任何服务器</div>
+    <div class="ob-group">
+      <div class="ob-glabel">薪资模式</div>
+      <div class="ob-seg" id="obModeSeg">
+        <button data-mode="monthly" class="on">固定月薪</button>
+        <button data-mode="hourly">时薪 / 计时</button>
+      </div>
+    </div>
+    <div id="obMonthlyFields">
+      <div class="ob-field">
+        <label>月薪（元）</label>
+        <input id="ob_monthly" type="number" inputmode="decimal" placeholder="例：15000">
+      </div>
+      <div class="ob-field">
+        <label>计薪天数（本月工作日，已自动计算）</label>
+        <input id="ob_days" type="number" inputmode="decimal" placeholder="21.75">
+      </div>
+    </div>
+    <div id="obHourlyFields" style="display:none">
+      <div class="ob-field">
+        <label>时薪（元/小时）</label>
+        <input id="ob_hourly_ob" type="number" inputmode="decimal" placeholder="例：80">
+      </div>
+    </div>
+    <div class="ob-group">
+      <div class="ob-glabel">工作时间</div>
+      <div class="ob-row">
+        <div class="ob-field"><label>上班</label><input id="ob_start" type="time" value="09:00"></div>
+        <div class="ob-field"><label>下班</label><input id="ob_end" type="time" value="18:00"></div>
+      </div>
+    </div>
+    <button class="ob-btn" id="obStart">开始计薪</button>
+    <span class="ob-skip" id="obSkip">跳过，先用默认参数看看</span>
+  </div>
+</div>
+
 <div class="wrap">
 
   <div class="head">
@@ -252,7 +336,7 @@
   <div class="logcard">
     <div class="logtop">
       <div class="h">每日小结 · DAILY LOG</div>
-      <button id="punchOutBtn">📋 下班打卡</button>
+      <button id="punchOutBtn">下班打卡</button>
     </div>
     <div id="summary"></div>
     <div class="chartbox"><svg id="chart" viewBox="0 0 600 220" preserveAspectRatio="xMidYMid meet"></svg></div>
@@ -513,7 +597,7 @@ document.querySelectorAll('#daySeg button').forEach(b=>{ b.onclick=()=>{
   document.querySelectorAll('#daySeg button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
   state.isWorkday=b.dataset.wd==='1'; render();
 };});
-document.querySelectorAll('input').forEach(i=>i.addEventListener('input',()=>{ render(); saveSettings(); }));
+document.querySelectorAll('.wrap input').forEach(i=>i.addEventListener('input',()=>{ render(); saveSettings(); }));
 $('setHead').onclick=()=>$('settings').classList.toggle('open');
 $('i_anchorOn').onchange=()=>{
   const on=$('i_anchorOn').checked;
@@ -549,14 +633,48 @@ function fillDays(){
   render(); saveSettings();
 }
 $('daysAuto').onclick=fillDays;
-// 优先恢复上次设置；首次使用则按当月自动填计薪天数
-if(loadSettings()){
-  const _n=new Date(), _wd=workdaysInMonth(_n.getFullYear(),_n.getMonth()+1);
-  $('daysHint').textContent = _wd!=null
-    ? `已恢复上次设置 · 本月工作日参考 ${_wd} 天，可点「↻ 按本月」重算`
-    : `已恢复上次设置`;
+// 优先恢复上次设置；首次使用显示配置引导
+const _hasSettings=loadSettings();
+if(_hasSettings){
+  const _n=new Date(),_wd=workdaysInMonth(_n.getFullYear(),_n.getMonth()+1);
+  $('daysHint').textContent=_wd!=null
+    ?`已恢复上次设置 · 本月工作日参考 ${_wd} 天，可点「↻ 按本月」重算`
+    :`已恢复上次设置`;
 }else{
-  fillDays();
+  // 首次：预填计薪天数但不保存，等用户完成引导再存
+  const _n=new Date(),_wd=workdaysInMonth(_n.getFullYear(),_n.getMonth()+1);
+  if(_wd!=null){$('i_days').value=_wd;$('ob_days').value=_wd;}
+  $('daysHint').textContent=_wd!=null
+    ?`${_n.getFullYear()}年${_n.getMonth()+1}月实际工作日 ${_wd} 天（已扣法定节假日、含调休补班；可手动改）`
+    :`${_n.getFullYear()}年暂无内置节假日数据，请手动填写（法定固定基数为 21.75）`;
+  // 显示引导覆盖层
+  $('onboard').classList.add('show');
+  document.querySelectorAll('#obModeSeg button').forEach(b=>{b.onclick=()=>{
+    document.querySelectorAll('#obModeSeg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+    const m=b.dataset.mode;
+    $('obMonthlyFields').style.display=m==='monthly'?'block':'none';
+    $('obHourlyFields').style.display=m==='hourly'?'block':'none';
+  };});
+  function closeOnboard(){const ob=$('onboard');ob.classList.add('hide');setTimeout(()=>ob.style.display='none',250);}
+  $('obStart').onclick=()=>{
+    const m=document.querySelector('#obModeSeg button.on').dataset.mode;
+    const markErr=(el)=>{el.classList.add('err');el.focus();setTimeout(()=>el.classList.remove('err'),800);};
+    if(m==='monthly'){
+      if(!(parseFloat($('ob_monthly').value)>0)){markErr($('ob_monthly'));return;}
+      $('i_monthly').value=$('ob_monthly').value;
+      if($('ob_days').value)$('i_days').value=$('ob_days').value;
+    }else{
+      if(!(parseFloat($('ob_hourly_ob').value)>0)){markErr($('ob_hourly_ob'));return;}
+      $('i_hourly').value=$('ob_hourly_ob').value;
+    }
+    document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.toggle('on',x.dataset.mode===m));
+    document.querySelectorAll('.mode-only').forEach(el=>el.classList.toggle('show',el.dataset.for===m));
+    state.mode=m;
+    if($('ob_start').value)$('i_start').value=$('ob_start').value;
+    if($('ob_end').value)$('i_end').value=$('ob_end').value;
+    saveSettings();render();closeOnboard();
+  };
+  $('obSkip').onclick=()=>{saveSettings();closeOnboard();};
 }
 
 // 按周几自动初始化今天类型
