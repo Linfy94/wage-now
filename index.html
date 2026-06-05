@@ -7,8 +7,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <style>
   :root{
     --bg:#0c1014; --panel:#141a21; --panel2:#1a212a;
@@ -841,10 +839,39 @@ render();
 setInterval(render,200);
 
 // 战报分享
+function loadScript(src){
+  return new Promise((resolve,reject)=>{
+    if(document.querySelector('script[data-lib="'+src+'"]')){resolve();return;}
+    const s=document.createElement('script');
+    s.src=src; s.dataset.lib=src;
+    s.onload=resolve;
+    s.onerror=()=>reject(new Error('脚本加载失败'));
+    document.head.appendChild(s);
+  });
+}
+
 async function generateReport(){
-  if(typeof html2canvas==='undefined'||typeof QRCode==='undefined'){
-    alert('组件尚未加载完成，请稍候再试'); return;
+  // 立即打开弹层，告知用户正在加载
+  $('shareLoading').textContent='正在加载组件…';
+  $('shareLoading').style.display='block';
+  $('shareImgWrap').style.display='none';
+  $('shareModal').classList.add('show');
+
+  // 按需加载两个库
+  try{
+    await Promise.all([
+      typeof html2canvas!=='undefined'?Promise.resolve()
+        :loadScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'),
+      typeof QRCode!=='undefined'?Promise.resolve()
+        :loadScript('https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js')
+    ]);
+  }catch(e){
+    $('shareLoading').textContent='组件加载失败，请检查网络后重试';
+    return;
   }
+
+  $('shareLoading').textContent='正在生成…';
+
   const r=compute();
   const isPaid=state.mode==='hourly'||state.otPaid;
   const drain=state.mode==='monthly'&&!isPaid&&(r.phase==='over'||r.phase==='restUnpaid');
@@ -892,7 +919,7 @@ async function generateReport(){
 
   // 动态文案
   let slogan='';
-  const stH=fmtDurT(r.stdHourly*100/100), offStr=fmtDurT(r.officeH*60), otStr=fmtDurT(r.overH*60);
+  const offStr=fmtDurT(r.officeH*60), otStr=fmtDurT(r.overH*60);
   const pctDrain=r.stdHourly>0?((1-r.realHourly/r.stdHourly)*100).toFixed(0):0;
   if(r.phase==='pre') slogan='今天还没开始上班';
   else if(r.phase==='work') slogan=`今天已进账 ¥${fmt(r.earned)}，每分钟还在涨`;
@@ -919,21 +946,12 @@ async function generateReport(){
     });
   }catch(e){ qrEl.style.display='none'; }
 
-  // 显示弹层 loading 态
-  $('shareLoading').style.display='block';
-  $('shareLoading').textContent='正在生成…';
-  $('shareImgWrap').style.display='none';
-  $('shareModal').classList.add('show');
-
   // 等 QR 绘制完成后再截图
   await new Promise(res=>setTimeout(res,80));
   try{
     const canvas=await html2canvas($('shareCard'),{
       backgroundColor:'#0c1014', scale:2, logging:false, useCORS:true,
-      onclone:(doc)=>{
-        // 确保卡片在克隆文档中不被裁剪
-        doc.getElementById('shareCard').style.left='0';
-      }
+      onclone:(doc)=>{ doc.getElementById('shareCard').style.left='0'; }
     });
     const imgSrc=canvas.toDataURL('image/png');
     $('shareImg').src=imgSrc;
