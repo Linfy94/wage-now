@@ -89,6 +89,13 @@
   .dtin{background:var(--bg);border:1px solid var(--line2);color:var(--text);font-family:var(--mono);font-size:12.5px;padding:7px 10px;border-radius:8px;outline:none}
   .dtin:focus{border-color:var(--blue)}
   .punchInfo{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.03em;flex-basis:100%}
+  /* 休息日打卡 */
+  #rdPunch{width:100%;display:flex;flex-direction:column;gap:6px}
+  .rd-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .rd-btn{padding:8px 18px;border-radius:9px;border:1px solid var(--line2);background:var(--panel2);color:var(--dim);font-family:var(--cn);font-size:13px;font-weight:600;cursor:pointer;transition:.15s;white-space:nowrap}
+  .rd-btn:hover{border-color:var(--blue);color:var(--text)}
+  .rd-btn.rd-active{background:#0d2b0d;border-color:#3a7a3a;color:#6fcf6f}
+  .rd-elapsed{font-family:var(--mono);font-size:12px;color:var(--faint)}
   .metrics{display:grid;grid-template-columns:1fr 1fr;gap:1px;margin-top:14px;
     background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
   .metric{background:var(--panel);padding:14px 16px}
@@ -292,9 +299,21 @@
     <div class="drainMeter" id="drainMeter">正在白干流失 <b id="lostAmt">¥0.00</b></div>
     <div class="status pre" id="status"><span class="dot"></span><span id="statusText">尚未开始</span></div>
     <div class="punch" id="punch">
-      <label class="ptoggle"><input type="checkbox" id="i_anchorOn"><span>通宵 / 跨日</span></label>
-      <input type="datetime-local" id="i_anchor" class="dtin" style="display:none">
-      <span class="punchInfo" id="punchInfo">干到跨日 / 通宵时勾选，并把上班时刻校准到真实开始时间</span>
+      <!-- 工作日：通宵跨日 -->
+      <div id="wdPunch" style="display:contents">
+        <label class="ptoggle"><input type="checkbox" id="i_anchorOn"><span>通宵 / 跨日</span></label>
+        <input type="datetime-local" id="i_anchor" class="dtin" style="display:none">
+        <span class="punchInfo" id="punchInfo">干到跨日 / 通宵时勾选，并把上班时刻校准到真实开始时间</span>
+      </div>
+      <!-- 休息日：手动多段计时 -->
+      <div id="rdPunch" style="display:none">
+        <div class="rd-controls">
+          <button id="rdStartBtn" class="rd-btn">开始上班</button>
+          <button id="rdPauseBtn" class="rd-btn rd-active" style="display:none">暂停计时</button>
+          <span class="rd-elapsed" id="rdElapsed" style="display:none"></span>
+        </div>
+        <span class="punchInfo">休息日按段计时：每次上班点开始，休息点暂停，可多次记录</span>
+      </div>
     </div>
     <button id="shareBtn">生成今日战报</button>
     <div class="fx" id="fx"></div>
@@ -473,7 +492,8 @@ Minimum version required to store current data is: `+i+`.
 
 <script>
 const $ = id => document.getElementById(id);
-const state = { mode:'monthly', isWorkday:true, anchorStart:null, punchedOutAt:null };
+const state = { mode:'monthly', isWorkday:true, anchorStart:null, punchedOutAt:null,
+                restCumulativeMs:0, restSessionStart:null };
 let fxMode=null;
 
 function parseTime(str){ const [h,m]=(str||'00:00').split(':').map(Number); const d=new Date(); d.setHours(h,m,0,0); return d; }
@@ -523,28 +543,31 @@ function compute(){
 
   // 从实际上班到现在的在岗时长（扣午休），可跨日累计
   const officeMs = now>start ? (now-start)-overlap(start.getTime(),now.getTime(),lunchS.getTime(),lunchE.getTime()) : 0;
-  const officeH = Math.max(0,officeMs)/3600000;
+  let officeH = Math.max(0,officeMs)/3600000;
 
   let earned=0,perMin=0,realHourly=0,phase='pre';
   let normalH=0,overH=0,bufferH=0,R1=R0;
 
   if(!state.isWorkday){
-    // 休息日：全程算加班
-    overH=officeH;
-    if(now<start){ phase='pre'; }
-    else if(now>=lunchS&&now<lunchE){ phase='lunch'; }
-    else if(officeH>0){
+    // 休息日：按手动打卡会话累计，不依赖常规上班时间
+    const rdActiveMs = state.restSessionStart ? Math.max(0, now.getTime()-state.restSessionStart) : 0;
+    const rdTotalMs = state.restCumulativeMs + rdActiveMs;
+    officeH = rdTotalMs / 3600000;
+    overH = officeH;
+    if(rdTotalMs<=0 && !state.restSessionStart){
+      phase='pre';
+    } else {
       if(isPaid){
         phase='restPaid';
         earned=baseHourly*state.reMult*officeH;
-        perMin=baseHourly*state.reMult/60;
-        realHourly=baseHourly*state.reMult;
+        perMin=state.restSessionStart ? baseHourly*state.reMult/60 : 0;
+        realHourly=officeH>0 ? earned/officeH : 0;
       }else{
         phase='restUnpaid';
         earned=0; perMin=0; realHourly=0;
         R1=(state.days>0&&stdHours>0)?state.monthly/(state.days*stdHours+officeH):R0;
       }
-    } else { phase='pre'; }
+    }
   } else {
     // 工作日：用「实际在岗区间」与「计划时段」求交集，兼容打卡早晚与跨日
     const nowT=now.getTime(), sT=start.getTime(), spT=startPlan.getTime(),
@@ -625,6 +648,8 @@ function render(){
     else if(r.phase==='buffer'){ $('rate').innerHTML=`<b style="color:var(--amber)">¥0.00</b> · 缓冲期不计费`; }
     else if(r.phase==='lunch'){ $('rate').innerHTML=`午休中 · 暂停计薪`; }
     else if(r.phase==='off'){ $('rate').innerHTML=`收工 · 今日计薪已锁定`; }
+    else if(!state.isWorkday&&(r.phase==='restPaid'||r.phase==='restUnpaid')){
+      $('rate').innerHTML=`计时已暂停 · 点继续计时`; }
     else { $('rate').innerHTML=`等待开工`; }
   }
 
@@ -632,7 +657,9 @@ function render(){
   $('status').className='status '+cls;
   let stxt=txt;
   if(r.phase==='over') stxt=`加班中 · ${fmtDurT(r.overH*60)}`;
-  if(r.phase==='restPaid'||r.phase==='restUnpaid') stxt=`${txt.split(' · ')[0]} · ${fmtDurT(r.officeH*60)}`;
+  if(r.phase==='restPaid'||r.phase==='restUnpaid'){
+    stxt = state.restSessionStart ? `${txt.split(' · ')[0]} · ${fmtDurT(r.officeH*60)}` : '休息日 · 计时暂停';
+  }
   $('statusText').textContent=stxt;
 
   // 指标
@@ -683,9 +710,54 @@ function render(){
   $('stdHint').textContent=`标准工时 ${r.stdHours.toFixed(2)} 小时/天（已扣午休）`;
   const showOt = state.mode==='hourly' || state.otPaid;
   document.querySelectorAll('.otonly').forEach(el=>el.style.display = showOt?'block':'none');
+
+  // 工作日 / 休息日打卡区切换
+  const isRd=!state.isWorkday;
+  $('wdPunch').style.display=isRd?'none':'contents';
+  $('rdPunch').style.display=isRd?'':'none';
+  if(isRd){
+    const hasTime=state.restCumulativeMs>0||!!state.restSessionStart;
+    const running=!!state.restSessionStart;
+    $('rdStartBtn').textContent=state.restCumulativeMs>0?'继续上班':'开始上班';
+    $('rdStartBtn').style.display=running?'none':'';
+    $('rdStartBtn').className='rd-btn';
+    $('rdPauseBtn').style.display=running?'':'none';
+    if(hasTime){
+      const activeMs=running?Math.max(0,Date.now()-state.restSessionStart):0;
+      const tot=(state.restCumulativeMs+activeMs)/60000;
+      $('rdElapsed').textContent='今日累计 '+fmtDurT(tot);
+      $('rdElapsed').style.display='';
+    }else{ $('rdElapsed').style.display='none'; }
+    // punchOutBtn：休息日有记录时才显示"结束今日记录"
+    $('punchOutBtn').textContent='结束今日记录';
+    $('punchOutBtn').style.display=hasTime&&!state.punchedOutAt?'':'none';
+  }else{
+    $('punchOutBtn').textContent='下班打卡';
+    $('punchOutBtn').style.display=state.punchedOutAt?'none':'';
+  }
 }
 
 // 交互
+// —— 休息日打卡会话持久化（按日期存储，次日自动失效）——
+function _todayKeyRd(){ const n=new Date(),p=x=>String(x).padStart(2,'0'); return `${n.getFullYear()}-${p(n.getMonth()+1)}-${p(n.getDate())}`; }
+function saveRestDay(){
+  try{
+    localStorage.setItem('wage_restday_v1',JSON.stringify({
+      date:_todayKeyRd(), cumulativeMs:state.restCumulativeMs, sessionStart:state.restSessionStart
+    }));
+  }catch(e){}
+}
+function loadRestDay(){
+  try{
+    const raw=localStorage.getItem('wage_restday_v1');
+    if(!raw) return;
+    const d=JSON.parse(raw);
+    if(d.date!==_todayKeyRd()) return;
+    state.restCumulativeMs=d.cumulativeMs||0;
+    state.restSessionStart=d.sessionStart||null;
+  }catch(e){}
+}
+
 // —— 设置持久化：记住用户上次填写的参数 ——
 function saveSettings(){
   try{
@@ -720,6 +792,11 @@ document.querySelectorAll('#modeSeg button').forEach(b=>{ b.onclick=()=>{
 };});
 document.querySelectorAll('#daySeg button').forEach(b=>{ b.onclick=()=>{
   document.querySelectorAll('#daySeg button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+  // 切换为工作日时，若有活跃休息日会话则先暂停
+  if(b.dataset.wd==='1' && state.restSessionStart){
+    state.restCumulativeMs+=Date.now()-state.restSessionStart;
+    state.restSessionStart=null; saveRestDay();
+  }
   state.isWorkday=b.dataset.wd==='1'; render();
 };});
 document.querySelectorAll('.wrap input').forEach(i=>i.addEventListener('input',()=>{ render(); saveSettings(); }));
@@ -760,6 +837,7 @@ function fillDays(){
 $('daysAuto').onclick=fillDays;
 // 优先恢复上次设置；首次使用显示配置引导
 const _hasSettings=loadSettings();
+loadRestDay(); // 恢复今日休息日打卡会话（次日自动失效）
 if(_hasSettings){
   const _n=new Date(),_wd=workdaysInMonth(_n.getFullYear(),_n.getMonth()+1);
   $('daysHint').textContent=_wd!=null
@@ -863,14 +941,34 @@ function renderLog(){
 }
 
 $('punchOutBtn').onclick=()=>{
+  if(!state.isWorkday){
+    // 休息日：先终止当前会话，再记录
+    if(state.restSessionStart){ state.restCumulativeMs+=Date.now()-state.restSessionStart; state.restSessionStart=null; }
+    if(state.restCumulativeMs<=0) return;
+  }
   const r=compute();
-  if(r.officeH<=0){ $('logNote').textContent='当前没有在岗时长，暂无法记录'; return; }
+  if(state.isWorkday&&r.officeH<=0){ $('logNote').textContent='当前没有在岗时长，暂无法记录'; return; }
   state.punchedOutAt=Date.now();
   const key=todayKey(), log=loadLog();
-  log[key]={date:key,officeH:r.officeH,normalH:r.normalH,overH:r.overH,earned:r.earned,effHourly:r.earned/r.officeH,stdHourly:r.stdHourly,mode:state.mode,isWorkday:state.isWorkday};
-  saveLog(log); renderLog();
+  log[key]={date:key,officeH:r.officeH,normalH:r.normalH,overH:r.overH,earned:r.earned,
+            effHourly:r.officeH>0?r.earned/r.officeH:0,stdHourly:r.stdHourly,mode:state.mode,isWorkday:state.isWorkday};
+  saveLog(log); saveRestDay(); renderLog();
 };
-$('clearLog').onclick=()=>{ try{if(window.confirm&&!window.confirm('清除全部每日记录？'))return;}catch(e){} saveLog({}); memLog={}; state.punchedOutAt=null; renderLog(); render(); };
+// 休息日：开始计时
+$('rdStartBtn').onclick=()=>{
+  state.restSessionStart=Date.now(); saveRestDay(); render();
+};
+// 休息日：暂停计时
+$('rdPauseBtn').onclick=()=>{
+  if(state.restSessionStart){ state.restCumulativeMs+=Date.now()-state.restSessionStart; state.restSessionStart=null; }
+  saveRestDay(); render();
+};
+$('clearLog').onclick=()=>{
+  try{if(window.confirm&&!window.confirm('清除全部每日记录？'))return;}catch(e){}
+  saveLog({}); memLog={}; state.punchedOutAt=null;
+  state.restCumulativeMs=0; state.restSessionStart=null; saveRestDay();
+  renderLog(); render();
+};
 renderLog();
 
 render();
